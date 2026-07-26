@@ -44,7 +44,7 @@
 
   function handleClearAll() {
     if (confirm('Remove all notes?')) {
-      store.history.record('Clear all', () => ({ notes: $state.snapshot(store.notes) }));
+      store.history.record('Clear all');
       store.clearNotes();
     }
   }
@@ -443,7 +443,16 @@
 
   <button
     class="text-btn expand-btn"
-    onclick={() => document.documentElement.requestFullscreen()}
+    onclick={() => {
+      if (typeof document.documentElement.requestFullscreen !== 'function') return;
+      try {
+        void document.documentElement.requestFullscreen().catch(() => {
+          // Fullscreen denied or unsupported at request time — ignore.
+        });
+      } catch {
+        // Some browsers throw synchronously instead of rejecting.
+      }
+    }}
     aria-label="Expand to fullscreen"
   >
     <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">

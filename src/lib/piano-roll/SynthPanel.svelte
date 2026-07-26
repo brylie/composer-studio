@@ -214,12 +214,13 @@
         FILTER
       </button>
       <div class="filter-toggle-wrap">
-        <div
+        <button
+          type="button"
           class="toggle-pill"
           class:on={store.synthSettings.filter.enabled}
           role="switch"
           aria-checked={store.synthSettings.filter.enabled}
-          tabindex="0"
+          aria-label="Toggle filter"
           onclick={() => {
             store.synthSettings = {
               ...store.synthSettings,
@@ -229,21 +230,9 @@
               },
             };
           }}
-          onkeydown={(e) => {
-            if (e.key === ' ' || e.key === 'Enter') {
-              e.preventDefault();
-              store.synthSettings = {
-                ...store.synthSettings,
-                filter: {
-                  ...store.synthSettings.filter,
-                  enabled: !store.synthSettings.filter.enabled,
-                },
-              };
-            }
-          }}
         >
           <div class="toggle-knob"></div>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -463,12 +452,18 @@
     width: 28px;
     height: 16px;
     background: #333355;
+    border: none;
     border-radius: 8px;
     padding: 2px;
     display: flex;
     align-items: center;
     cursor: pointer;
     transition: background 0.15s;
+  }
+
+  .toggle-pill:focus-visible {
+    outline: 2px solid #6b6bd9;
+    outline-offset: 2px;
   }
 
   .toggle-pill.on {

@@ -461,8 +461,6 @@ describe('createStore — undo/redo', () => {
   it('redo re-applies after undo', () => {
     const store = createStore();
     store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.deleteSelected(); // records 'Delete selected' — but no selection → noop
-    // Use deleteSelected properly
     store.selectNote('a', false);
     store.deleteSelected(); // records and removes 'a'
     expect(store.notes.length).toBe(0);

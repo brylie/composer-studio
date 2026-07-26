@@ -44,7 +44,11 @@ export default defineConfig({
     },
     coverage: {
       provider: 'v8',
-      include: ['src/lib/piano-roll/history.ts', 'src/lib/piano-roll/types.ts'],
+      include: [
+        'src/lib/piano-roll/history.ts',
+        'src/lib/piano-roll/types.ts',
+        'src/lib/piano-roll/store.svelte.ts',
+      ],
       thresholds: {
         lines: 80,
         functions: 80,

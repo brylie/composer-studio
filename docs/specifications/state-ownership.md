@@ -59,7 +59,9 @@ export function provideEditorState() {
 }
 
 export function getEditorState() {
-  return getContext(KEY); // throws clearly if no provider is an ancestor
+  const state = getContext(KEY);
+  if (!state) throw new Error('No EditorState provider found in ancestor tree');
+  return state; // throws clearly if no provider is an ancestor
 }
 ```
 

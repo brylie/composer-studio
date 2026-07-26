@@ -51,7 +51,7 @@ language on top of the framework's own.
 
 ### The rule, stated once
 
-```
+```text
 UI  →  Application state  →  { Domain, Infrastructure adapters }
 ```
 

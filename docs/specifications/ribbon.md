@@ -143,11 +143,11 @@ overflow treatment as the ribbon groups below.
 
 ## Responsive behavior
 
-| Breakpoint          | Ribbon                                                                                                                 | Quick Access Bar                             |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| Desktop (≥1024px)   | Full tabs + groups, icon+label buttons, always visible                                                                 | Always visible                               |
-| Tablet (600–1024px) | Icon-only buttons with tooltips; groups compress, no group label row                                                   | Always visible                               |
-| Mobile (<600px)     | Collapsed by default behind a toggle; opens as an overlay/bottom sheet; tabs become a horizontally scrollable pill row | Minimal: transport, undo/redo, ribbon toggle |
+| Breakpoint           | Ribbon                                                                                                                 | Quick Access Bar                             |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Desktop (≥1024px)    | Full tabs + groups, icon+label buttons, always visible                                                                 | Always visible                               |
+| Tablet (600–<1024px) | Icon-only buttons with tooltips; groups compress, no group label row                                                   | Always visible                               |
+| Mobile (<600px)      | Collapsed by default behind a toggle; opens as an overlay/bottom sheet; tabs become a horizontally scrollable pill row | Minimal: transport, undo/redo, ribbon toggle |
 
 ### Overflow: horizontal scroll, not truncation
 

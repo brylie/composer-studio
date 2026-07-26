@@ -91,6 +91,14 @@ function hasSchemaVersion(doc: unknown): doc is { schemaVersion: number } {
   );
 }
 
+// Full structural check against the current-version ProjectFile shape —
+// every field from the interface above, not just schemaVersion. This is
+// the same guard Import Project runs a freshly-parsed file through; reused
+// here so a migration bug can't slip a malformed doc past `loadProjectFile`.
+function isProjectFile(doc: unknown): doc is ProjectFile {
+  // ... checks every ProjectFile field's presence and type, e.g. Array.isArray(notes), etc.
+}
+
 function loadProjectFile(raw: unknown): ProjectFile {
   if (!hasSchemaVersion(raw)) {
     throw new ProjectFileError('Not a recognizable project file');
@@ -117,15 +125,28 @@ function loadProjectFile(raw: unknown): ProjectFile {
   if (!hasSchemaVersion(doc) || doc.schemaVersion !== CURRENT_SCHEMA_VERSION) {
     throw new ProjectFileError('Migration produced an invalid document');
   }
-  return doc as ProjectFile;
+  if (!isProjectFile(doc)) {
+    throw new ProjectFileError('Migrated document does not match the current schema');
+  }
+  return doc;
 }
 ```
 
-Three distinct failure modes, each rejected explicitly rather than left to
+`isProjectFile` is the same structural validator used everywhere else a
+`ProjectFile` is trusted (e.g. after `JSON.parse` on import) — it checks
+every field above is present and correctly shaped, not just `schemaVersion`.
+Reusing it here means a migration bug that produces a document with the
+right `schemaVersion` but a missing/malformed field (a bad hand-written
+migration, not a hypothetical) is caught before `loadProjectFile` hands the
+document back as trusted `ProjectFile`, instead of surfacing later as a
+crash somewhere deep in rendering.
+
+Four distinct failure modes, each rejected explicitly rather than left to
 crash on a bad property access or silently produce a half-valid document:
 a file that isn't shaped like a `ProjectFile` at all, a `schemaVersion`
-newer than this app version understands, and a missing migration step for
-some version in between. [Import Project](#export--import-the-sharing-mechanism)
+newer than this app version understands, a missing migration step for
+some version in between, and a migrated document that still doesn't match
+the current schema's full shape. [Import Project](#export--import-the-sharing-mechanism)
 surfaces `ProjectFileError` as a user-facing message rather than letting it
 propagate as an unhandled exception.
 

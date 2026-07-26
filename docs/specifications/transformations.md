@@ -51,7 +51,7 @@ type ParamField =
       default: { min: number; max: number };
     });
 
-interface CommandDescriptor<TParams extends Record<string, unknown> = Record<string, never>> {
+interface CommandDescriptorBase<TParams extends Record<string, unknown> = Record<string, never>> {
   id: string; // stable, kebab-case — e.g. "transpose"
   category: 'transform' | 'generate' | 'export' | 'view' | 'transport';
   labelKey: string; // Paraglide message key, not a raw string — see ribbon.md i18n
@@ -70,11 +70,22 @@ interface CommandDescriptor<TParams extends Record<string, unknown> = Record<str
   // this; a generic labelKey (e.g. "Not available for this selection")
   // is the fallback when a command omits it.
   getDisabledReasonKey?(ctx: CommandContext): string;
-  // Exactly one of `run` or `effect` — see "Export commands are effects,
-  // not transforms" below for why file I/O can't go through `run()`.
-  run?(ctx: CommandContext, params: TParams): { notes: Note[]; label: string };
-  effect?(ctx: CommandContext, params: TParams): Promise<void>;
 }
+
+// Exactly one of `run` or `effect` — enforced as a union rather than two
+// optional properties, so a descriptor with neither or both fails
+// type-checking instead of only failing at runtime. See "Export commands
+// are effects, not transforms" below for why file I/O can't go through
+// `run()`.
+type CommandDescriptor<TParams extends Record<string, unknown> = Record<string, never>> =
+  | (CommandDescriptorBase<TParams> & {
+      run(ctx: CommandContext, params: TParams): { notes: Note[]; label: string };
+      effect?: never;
+    })
+  | (CommandDescriptorBase<TParams> & {
+      run?: never;
+      effect(ctx: CommandContext, params: TParams): Promise<void>;
+    });
 ```
 
 `ParamFieldBase.showIf` and the `'number-range'` variant both exist because

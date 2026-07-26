@@ -4,7 +4,11 @@
   import { isBlackKey, MIN_MIDI, MAX_MIDI, NOTE_COUNT } from './types.js';
   import type { Note } from './types.js';
   import { auditionNote } from './audio.js';
-  import { SvelteMap } from 'svelte/reactivity';
+
+  /** Shift or Ctrl/Cmd — the modifiers that mean "add to selection" rather than replace it. */
+  function isAdditive(e: PointerEvent): boolean {
+    return e.shiftKey || e.ctrlKey || e.metaKey;
+  }
 
   // Grid dimensions
   const totalWidth = $derived(store.totalBeats * store.pixelsPerBeat);
@@ -32,8 +36,7 @@
   let didSnapshotDrag = false;
 
   // Multi-note drag: initial positions of all selected notes at drag start
-  let multiDragInitialPositions: SvelteMap<string, { startBeat: number; midiNote: number }> | null =
-    null;
+  let multiDragInitialPositions: Map<string, { startBeat: number; midiNote: number }> | null = null;
   let dragStartBeat = 0;
   let dragStartRow = 0;
 
@@ -119,11 +122,12 @@
         // Multi-drag: activate when the dragged note is part of a multi-selection
         const selIds = store.selectedNoteIds;
         if (selIds.size > 1 && selIds.has(noteId)) {
-          multiDragInitialPositions = new SvelteMap();
-          for (const id of selIds) {
-            const n = store.notes.find((n) => n.id === id);
-            if (n)
-              multiDragInitialPositions.set(id, { startBeat: n.startBeat, midiNote: n.midiNote });
+          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain lookup, never read reactively/in markup
+          multiDragInitialPositions = new Map();
+          for (const n of store.notes) {
+            if (selIds.has(n.id)) {
+              multiDragInitialPositions.set(n.id, { startBeat: n.startBeat, midiNote: n.midiNote });
+            }
           }
         } else {
           multiDragInitialPositions = null;
@@ -133,7 +137,7 @@
       // Empty space: begin drag-to-select rectangle.
       // In 'draw' mode, note creation is deferred until pointer up (if no significant drag).
       // In 'select' mode, empty-space click deselects (zero-size lasso) — no note created.
-      if (!e.shiftKey && !(e.ctrlKey || e.metaKey)) store.deselectAll();
+      if (!isAdditive(e)) store.deselectAll();
       const { beat, row } = getGridCoords(e);
       dragStartBeat = beat;
       dragStartRow = row;
@@ -175,7 +179,7 @@
 
     if (dragMode === 'resize') {
       if (!didSnapshotDrag) {
-        store.history.record('Resize note', () => ({ notes: $state.snapshot(store.notes) }));
+        store.history.record('Resize note');
         didSnapshotDrag = true;
       }
       const note = store.notes.find((n) => n.id === activeNoteId);
@@ -185,21 +189,36 @@
       store.updateNote(activeNoteId, { durationBeats: duration });
     } else if (dragMode === 'move') {
       if (!didSnapshotDrag) {
-        store.history.record('Move note', () => ({ notes: $state.snapshot(store.notes) }));
+        store.history.record('Move note');
         didSnapshotDrag = true;
       }
       if (multiDragInitialPositions) {
-        // Move all selected notes by the same snapped delta in a single batch
+        // Move all selected notes by the same snapped delta in a single batch.
+        // Clamp the shared delta once, using the group's min/max initial
+        // positions, so the whole selection stays in-bounds together instead
+        // of each note clamping independently and losing relative spacing.
         const rawDelta = beat - dragStartBeat;
-        const snappedDelta = Math.round(rawDelta / snap) * snap;
-        const rowDelta = row - dragStartRow;
-        const updates = new SvelteMap<string, Partial<Note>>();
+        let snappedDelta = Math.round(rawDelta / snap) * snap;
+        let rowDelta = row - dragStartRow;
+
+        let minStartBeat = Infinity;
+        let minRow = Infinity;
+        let maxRow = -Infinity;
+        for (const init of multiDragInitialPositions.values()) {
+          if (init.startBeat < minStartBeat) minStartBeat = init.startBeat;
+          const r = rowForMidi(init.midiNote);
+          if (r < minRow) minRow = r;
+          if (r > maxRow) maxRow = r;
+        }
+        snappedDelta = Math.max(snappedDelta, -minStartBeat);
+        rowDelta = Math.max(rowDelta, -minRow);
+        rowDelta = Math.min(rowDelta, NOTE_COUNT - 1 - maxRow);
+
+        // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain lookup passed straight to store.updateNotes, never read reactively
+        const updates = new Map<string, Partial<Note>>();
         for (const [id, init] of multiDragInitialPositions) {
-          const newBeat = Math.max(0, init.startBeat + snappedDelta);
-          const newRow = Math.max(
-            0,
-            Math.min(NOTE_COUNT - 1, rowForMidi(init.midiNote) + rowDelta),
-          );
+          const newBeat = init.startBeat + snappedDelta;
+          const newRow = rowForMidi(init.midiNote) + rowDelta;
           updates.set(id, { startBeat: newBeat, midiNote: midiForRow(newRow) });
         }
         store.updateNotes(updates);
@@ -222,7 +241,7 @@
         const snappedBeat = snapFloor(beat);
         const midi = midiForRow(Math.max(0, Math.min(NOTE_COUNT - 1, row)));
         const id = generateId();
-        store.history.record('Add note', () => ({ notes: $state.snapshot(store.notes) }));
+        store.history.record('Add note');
         store.addNote({
           id,
           midiNote: midi,
@@ -230,7 +249,7 @@
           durationBeats: store.snapBeats,
           velocity: 100,
         });
-        store.selectNote(id, false);
+        store.selectNote(id, isAdditive(e));
         store.setAnchor(id);
         auditionNote(midi, store.synthSettings);
       } else if (selRect) {
@@ -245,7 +264,7 @@
             return nl < rect.x1 && nr > rect.x0 && nt < rect.y1 && nb > rect.y0;
           })
           .map((n) => n.id);
-        store.selectNotes(toSelect, e.shiftKey);
+        store.selectNotes(toSelect, isAdditive(e));
       }
       selRect = null;
       pendingNoteCreate = null;
@@ -265,7 +284,7 @@
     e.preventDefault();
     const noteEl = (e.target as HTMLElement).closest<HTMLElement>('[data-note-id]');
     if (noteEl) {
-      store.history.record('Delete note', () => ({ notes: $state.snapshot(store.notes) }));
+      store.history.record('Delete note');
       store.removeNote(noteEl.dataset.noteId ?? '');
     }
   }

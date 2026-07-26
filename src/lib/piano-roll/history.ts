@@ -5,12 +5,14 @@ import type { DocumentSnapshot, Note } from './types.js';
 /**
  * True when the union of note intervals has no gaps. Uses union-coverage
  * (not naive pairwise) so a note spanning shorter neighbours does not
- * falsely report a gap.
+ * falsely report a gap. Sorts a copy by `startBeat` internally, so callers
+ * don't have to guarantee pre-sorted input for a correct result.
  */
 export function isContiguous(notes: Note[]): boolean {
   if (notes.length === 0) return true;
+  const sorted = notes.slice().sort((a, b) => a.startBeat - b.startBeat);
   let coveredUntil = -Infinity;
-  for (const note of notes) {
+  for (const note of sorted) {
     if (note.startBeat > coveredUntil) {
       if (coveredUntil !== -Infinity) return false;
     }

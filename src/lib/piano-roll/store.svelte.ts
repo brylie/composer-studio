@@ -294,15 +294,21 @@ export function createStore() {
 
   // ── Undo / Redo ───────────────────────────────────────────────────────────
 
+  /** After restoring `notes` from a history entry, drop selection ids that no longer exist. */
+  function pruneSelectionToExistingNotes() {
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain local lookup, discarded immediately, never read reactively
+    const ids = new Set(notes.map((n) => n.id));
+    for (const id of selectedNoteIds) {
+      if (!ids.has(id)) selectedNoteIds.delete(id);
+    }
+  }
+
   function undo() {
     const entry = _history.undo(currentSnapshot);
     syncHistory();
     if (!entry) return;
     notes = entry.notes;
-    const ids = new SvelteSet(notes.map((n) => n.id));
-    for (const id of selectedNoteIds) {
-      if (!ids.has(id)) selectedNoteIds.delete(id);
-    }
+    pruneSelectionToExistingNotes();
   }
 
   function redo() {
@@ -310,10 +316,7 @@ export function createStore() {
     syncHistory();
     if (!entry) return;
     notes = entry.notes;
-    const ids = new SvelteSet(notes.map((n) => n.id));
-    for (const id of selectedNoteIds) {
-      if (!ids.has(id)) selectedNoteIds.delete(id);
-    }
+    pruneSelectionToExistingNotes();
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -443,7 +446,7 @@ export function createStore() {
         get redoLabel() {
           return _redoLabel;
         },
-        record(label: string, snapshot: () => Omit<DocumentSnapshot, 'label'>) {
+        record(label: string, snapshot: () => Omit<DocumentSnapshot, 'label'> = currentSnapshot) {
           _history.record(label, snapshot);
           syncHistory();
         },

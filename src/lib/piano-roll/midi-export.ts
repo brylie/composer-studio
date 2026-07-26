@@ -19,6 +19,12 @@ function int16(value: number): number[] {
   return [(value >> 8) & 0xff, value & 0xff];
 }
 
+function eventOrder(statusByte: number): number {
+  if (statusByte === 0x80) return 0; // note-off
+  if (statusByte === 0x90) return 1; // note-on
+  return 2; // meta events (tempo, end-of-track) sort last among ties
+}
+
 export function exportMidi(notes: Note[], tempo: number, filename = 'track.mid'): void {
   const TICKS_PER_BEAT = 480;
   const microsecondsPerBeat = Math.round(60_000_000 / tempo);
@@ -46,7 +52,13 @@ export function exportMidi(notes: Note[], tempo: number, filename = 'track.mid')
 
   const lastTick = events.reduce((max, e) => Math.max(max, e.tick), 0);
   events.push({ tick: lastTick, data: [0xff, 0x2f, 0x00] });
-  events.sort((a, b) => a.tick - b.tick);
+  // For equal ticks: note-off (0x80) before note-on (0x90) so a back-to-back
+  // same-pitch note doesn't have its off-event silence the following on-event;
+  // end-of-track (0xff) always last.
+  events.sort((a, b) => {
+    if (a.tick !== b.tick) return a.tick - b.tick;
+    return eventOrder(a.data[0]) - eventOrder(b.data[0]);
+  });
 
   const trackBytes: number[] = [];
   let prevTick = 0;

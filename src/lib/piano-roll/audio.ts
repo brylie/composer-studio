@@ -23,8 +23,9 @@ export function triggerNote(
   osc.type = settings.waveform;
   osc.frequency.value = midiToFreq(midiNote);
 
+  let filter: BiquadFilterNode | null = null;
   if (settings.filter.enabled) {
-    const filter = ctx.createBiquadFilter();
+    filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = settings.filter.cutoff;
     filter.Q.value = settings.filter.resonance;
@@ -43,6 +44,11 @@ export function triggerNote(
   const releaseStart = Math.max(t + attack + decay, t + durationSec - release);
   gain.gain.setValueAtTime(vol * sustain, releaseStart);
   gain.gain.linearRampToValueAtTime(0, releaseStart + release);
+
+  osc.onended = () => {
+    gain.disconnect(ctx.destination);
+    filter?.disconnect();
+  };
 
   osc.start(t);
   osc.stop(releaseStart + release + 0.05);
