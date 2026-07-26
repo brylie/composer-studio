@@ -145,6 +145,7 @@ export function createStore() {
   function removeNote(id: string) {
     notes = notes.filter((n) => n.id !== id);
     selectedNoteIds.delete(id);
+    if (selectionAnchor?.noteId === id) selectionAnchor = null;
   }
 
   function updateNote(id: string, updates: Partial<Note>) {
@@ -159,6 +160,7 @@ export function createStore() {
   function clearNotes() {
     notes = [];
     selectedNoteIds.clear();
+    selectionAnchor = null;
   }
 
   // ── Selection ─────────────────────────────────────────────────────────────
@@ -215,7 +217,12 @@ export function createStore() {
       .sort((a, b) => a.startBeat - b.startBeat || a.midiNote - b.midiNote);
     const anchorIndex = sorted.findIndex((n) => n.id === anchor.noteId);
     const focusIndex = sorted.findIndex((n) => n.id === focusNoteId);
-    if (anchorIndex === -1 || focusIndex === -1) return;
+    if (anchorIndex === -1 || focusIndex === -1) {
+      selectionAnchor = null;
+      selectedNoteIds.clear();
+      if (focusIndex !== -1) selectedNoteIds.add(focusNoteId);
+      return;
+    }
     const lo = Math.min(anchorIndex, focusIndex);
     const hi = Math.max(anchorIndex, focusIndex);
     selectedNoteIds.clear();
@@ -227,6 +234,7 @@ export function createStore() {
     recordHistory('Delete selected');
     notes = notes.filter((n) => !selectedNoteIds.has(n.id));
     selectedNoteIds.clear();
+    selectionAnchor = null;
   }
 
   // ── Clipboard ─────────────────────────────────────────────────────────────
