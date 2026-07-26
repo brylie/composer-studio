@@ -199,23 +199,18 @@
 
 	<!-- Filter -->
 	<div class="collapsible">
-		<button
-			class="collapsible-header"
-			onclick={() => {
-				showFilter = !showFilter;
-			}}
-			aria-expanded={showFilter}
-		>
-			<span class="chevron" class:open={showFilter}>›</span>
-			FILTER
-			<!-- Inline toggle so clicking it doesn't collapse the section -->
-			<div
-				role="none"
-				class="filter-toggle-wrap"
-				onclick={(e) => {
-					e.stopPropagation();
+		<div class="collapsible-head-row">
+			<button
+				class="collapsible-header"
+				onclick={() => {
+					showFilter = !showFilter;
 				}}
+				aria-expanded={showFilter}
 			>
+				<span class="chevron" class:open={showFilter}>›</span>
+				FILTER
+			</button>
+			<div class="filter-toggle-wrap">
 				<div
 					class="toggle-pill"
 					class:on={store.synthSettings.filter.enabled}
@@ -233,6 +228,7 @@
 					}}
 					onkeydown={(e) => {
 						if (e.key === ' ' || e.key === 'Enter') {
+							e.preventDefault();
 							store.synthSettings = {
 								...store.synthSettings,
 								filter: {
@@ -246,7 +242,7 @@
 					<div class="toggle-knob"></div>
 				</div>
 			</div>
-		</button>
+		</div>
 
 		{#if showFilter}
 			<div class="collapsible-body">
@@ -380,11 +376,19 @@
 		border-bottom: 1px solid #222238;
 	}
 
+	.collapsible-head-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding-right: 14px;
+	}
+
 	.collapsible-header {
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		width: 100%;
+		width: auto;
+		flex: 1;
 		padding: 10px 14px;
 		background: transparent;
 		border: none;
@@ -448,6 +452,8 @@
 	/* ── Filter toggle ── */
 	.filter-toggle-wrap {
 		margin-left: auto;
+		display: flex;
+		align-items: center;
 	}
 
 	.toggle-pill {

@@ -28,6 +28,7 @@
 	let activeNoteId: string | null = $state(null);
 	let dragOffsetBeat = $state(0);
 	let dragOffsetRow = $state(0);
+	let didSnapshotDrag = false;
 
 	// Multi-note drag: initial positions of all selected notes at drag start
 	let multiDragInitialPositions: Map<string, { startBeat: number; midiNote: number }> | null = null;
@@ -95,17 +96,17 @@
 			}
 			// else: already selected, no shift → keep multi-selection for drag
 
-			store.snapshotForUndo();
-
 			const noteRect = noteEl.getBoundingClientRect();
 			const isRightEdge = e.clientX > noteRect.right - 8;
 
 			if (isRightEdge) {
 				dragMode = 'resize';
 				activeNoteId = noteId;
+				didSnapshotDrag = false;
 			} else {
 				dragMode = 'move';
 				activeNoteId = noteId;
+				didSnapshotDrag = false;
 				const { beat, row } = getGridCoords(e);
 				dragOffsetBeat = beat - note.startBeat;
 				dragOffsetRow = row - rowForMidi(note.midiNote);
@@ -167,12 +168,20 @@
 		if (!activeNoteId) return;
 
 		if (dragMode === 'resize') {
+			if (!didSnapshotDrag) {
+				store.snapshotForUndo();
+				didSnapshotDrag = true;
+			}
 			const note = store.notes.find((n) => n.id === activeNoteId);
 			if (!note) return;
 			const rawDur = beat - note.startBeat;
 			const duration = Math.max(snap, Math.round(rawDur / snap) * snap);
 			store.updateNote(activeNoteId, { durationBeats: duration });
 		} else if (dragMode === 'move') {
+			if (!didSnapshotDrag) {
+				store.snapshotForUndo();
+				didSnapshotDrag = true;
+			}
 			if (multiDragInitialPositions) {
 				// Move all selected notes by the same snapped delta
 				const rawDelta = beat - dragStartBeat;
@@ -236,6 +245,7 @@
 		dragMode = 'none';
 		activeNoteId = null;
 		multiDragInitialPositions = null;
+		didSnapshotDrag = false;
 		const target = e.currentTarget as HTMLElement;
 		if (target.hasPointerCapture(e.pointerId)) {
 			target.releasePointerCapture(e.pointerId);

@@ -13,7 +13,7 @@ SvelteKit home route in `src/routes/+page.svelte`.
 
 ### Component Tree
 
-```
+```text
 PianoRoll.svelte          — Root layout, scroll container, playhead tracking
 ├── Toolbar.svelte         — Transport controls, snap grid, actions
 ├── PianoKeys.svelte       — Sticky-left piano keyboard column
@@ -204,7 +204,7 @@ Generates a **MIDI type-0** file entirely in-browser:
 
 ## Layout
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │  App header: title                                    [Export MIDI] │
 ├─────────────────────────────────────────────────────────────────────┤

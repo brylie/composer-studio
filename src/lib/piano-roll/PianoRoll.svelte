@@ -46,7 +46,7 @@
 			if (!e.ctrlKey && !e.metaKey) return;
 			e.preventDefault();
 			const delta = e.deltaY > 0 ? -20 : 20;
-			store.pixelsPerBeat = Math.max(20, Math.min(240, store.pixelsPerBeat + delta));
+			store.pixelsPerBeat = store.pixelsPerBeat + delta;
 		}
 		scrollEl.addEventListener('wheel', handleWheel, { passive: false });
 		return () => scrollEl!.removeEventListener('wheel', handleWheel);
@@ -191,14 +191,6 @@
 </div>
 
 <style>
-	:global(html, body) {
-		margin: 0;
-		padding: 0;
-		height: 100%;
-		overflow: hidden;
-		background: #1a1a2e;
-	}
-
 	.piano-roll {
 		display: flex;
 		flex-direction: column;

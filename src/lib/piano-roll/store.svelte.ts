@@ -165,7 +165,7 @@ function createStore() {
 			return pixelsPerBeat;
 		},
 		set pixelsPerBeat(v: number) {
-			pixelsPerBeat = v;
+			pixelsPerBeat = Math.max(20, Math.min(240, v));
 		},
 
 		get rowHeight() {

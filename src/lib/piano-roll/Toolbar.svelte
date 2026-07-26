@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { store } from './store.svelte.js';
 	import { startPlayback, stopPlayback } from './audio.js';
 	import { exportMidi } from './midi-export.js';
@@ -52,6 +53,10 @@
 		exportMidi(store.notes, store.tempo, `${store.trackName}.mid`);
 	}
 
+	onDestroy(() => {
+		stopPlayback();
+	});
+
 	// Keyboard shortcuts
 	$effect(() => {
 		function handleKey(e: KeyboardEvent) {
@@ -73,11 +78,11 @@
 			}
 			if (e.code === 'Equal' && (e.ctrlKey || e.metaKey)) {
 				e.preventDefault();
-				store.pixelsPerBeat = Math.min(240, store.pixelsPerBeat + 20);
+				store.pixelsPerBeat = store.pixelsPerBeat + 20;
 			}
 			if (e.code === 'Minus' && (e.ctrlKey || e.metaKey)) {
 				e.preventDefault();
-				store.pixelsPerBeat = Math.max(20, store.pixelsPerBeat - 20);
+				store.pixelsPerBeat = store.pixelsPerBeat - 20;
 			}
 			if (e.code === 'KeyZ' && (e.ctrlKey || e.metaKey)) {
 				e.preventDefault();
@@ -237,7 +242,7 @@
 		<button
 			class="icon-btn"
 			onclick={() => {
-				store.pixelsPerBeat = Math.max(20, store.pixelsPerBeat - 20);
+				store.pixelsPerBeat = store.pixelsPerBeat - 20;
 			}}
 			aria-label="Zoom out"
 			title="Zoom out (Ctrl+−)"
@@ -267,7 +272,7 @@
 		<button
 			class="icon-btn"
 			onclick={() => {
-				store.pixelsPerBeat = Math.min(240, store.pixelsPerBeat + 20);
+				store.pixelsPerBeat = store.pixelsPerBeat + 20;
 			}}
 			aria-label="Zoom in"
 			title="Zoom in (Ctrl++)"
