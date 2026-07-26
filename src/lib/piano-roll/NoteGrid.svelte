@@ -236,7 +236,10 @@
 		dragMode = 'none';
 		activeNoteId = null;
 		multiDragInitialPositions = null;
-		(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+		const target = e.currentTarget as HTMLElement;
+		if (target.hasPointerCapture(e.pointerId)) {
+			target.releasePointerCapture(e.pointerId);
+		}
 	}
 
 	function handleContextMenu(e: MouseEvent) {
