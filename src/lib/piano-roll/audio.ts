@@ -52,9 +52,9 @@ export interface PlaybackOptions {
 	getNotes: () => Note[];
 	getSettings: () => SynthSettings;
 	getTempo: () => number;
+	getTotalBeats: () => number;
+	getLoopEnabled: () => boolean;
 	startBeat: number;
-	totalBeats: number;
-	loopEnabled: boolean;
 	onTick: (beat: number) => void;
 	onStop: () => void;
 }
@@ -83,8 +83,10 @@ export function startPlayback(options: PlaybackOptions): void {
 	function schedule(): void {
 		if (!_options) return;
 		const ctx = getAudioContext();
-		const { getNotes, getSettings, getTempo, totalBeats, loopEnabled } = _options;
+		const { getNotes, getSettings, getTempo, getTotalBeats, getLoopEnabled } = _options;
 		const bps = getTempo() / 60;
+		const totalBeats = Math.max(0.001, getTotalBeats());
+		const loopEnabled = getLoopEnabled();
 		const elapsed = ctx.currentTime - _startAudioTime;
 		const currentBeat = _startBeat + elapsed * bps;
 		const windowEnd = currentBeat + LOOKAHEAD_SEC * bps;
@@ -92,10 +94,18 @@ export function startPlayback(options: PlaybackOptions): void {
 		const notes = getNotes();
 		const settings = getSettings();
 
-		const maxLoops = loopEnabled ? Math.ceil(windowEnd / totalBeats) + 1 : 1;
+		const minLoop = loopEnabled ? Math.max(0, Math.floor((currentBeat - 0.01) / totalBeats)) : 0;
+		const maxLoop = loopEnabled ? minLoop + 1 : 0;
+
+		// Keep only loops in the active scheduling window to avoid unbounded growth.
+		for (const [key, loop] of _scheduled) {
+			if (loop < minLoop || loop > maxLoop) {
+				_scheduled.delete(key);
+			}
+		}
 
 		for (const note of notes) {
-			for (let loop = 0; loop < maxLoops; loop++) {
+			for (let loop = minLoop; loop <= maxLoop; loop++) {
 				const noteBeat = note.startBeat + loop * totalBeats;
 				if (noteBeat < currentBeat - 0.01) continue;
 				if (noteBeat > windowEnd) continue;
@@ -117,14 +127,16 @@ export function startPlayback(options: PlaybackOptions): void {
 		if (!_options) return;
 		const ctx = getAudioContext();
 		const bps = _options.getTempo() / 60;
+		const totalBeats = Math.max(0.001, _options.getTotalBeats());
 		const elapsed = ctx.currentTime - _startAudioTime;
 		let beat = _startBeat + elapsed * bps;
 
-		if (_options.loopEnabled) {
-			beat = beat % _options.totalBeats;
-		} else if (beat >= _options.totalBeats) {
+		if (_options.getLoopEnabled()) {
+			beat = beat % totalBeats;
+		} else if (beat >= totalBeats) {
+			const onStop = _options.onStop;
 			stopPlayback();
-			_options?.onStop();
+			onStop();
 			return;
 		}
 

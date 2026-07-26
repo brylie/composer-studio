@@ -22,9 +22,9 @@
 				getNotes: () => store.notes,
 				getSettings: () => store.synthSettings,
 				getTempo: () => store.tempo,
+				getTotalBeats: () => store.totalBeats,
+				getLoopEnabled: () => store.loopEnabled,
 				startBeat: store.currentBeat,
-				totalBeats: store.totalBeats,
-				loopEnabled: store.loopEnabled,
 				onTick: (beat) => {
 					store.currentBeat = beat;
 				},
