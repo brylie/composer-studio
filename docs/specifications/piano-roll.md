@@ -38,11 +38,11 @@ PianoRoll.svelte          — Root layout, scroll container, playhead tracking
 
 ```typescript
 interface Note {
-	id: string;
-	midiNote: number; // MIDI pitch 36 (C2) – 107 (B7)
-	startBeat: number; // Start time in quarter-note beats
-	durationBeats: number; // Duration in quarter-note beats (min: one snap unit)
-	velocity: number; // 1–127
+  id: string;
+  midiNote: number; // MIDI pitch 36 (C2) – 107 (B7)
+  startBeat: number; // Start time in quarter-note beats
+  durationBeats: number; // Duration in quarter-note beats (min: one snap unit)
+  velocity: number; // 1–127
 }
 ```
 
@@ -50,19 +50,19 @@ interface Note {
 
 ```typescript
 interface SynthSettings {
-	waveform: OscillatorType; // 'sine' | 'square' | 'sawtooth' | 'triangle'
-	volume: number; // 0–100
-	envelope: {
-		attack: number; // seconds (0.001–2)
-		decay: number; // seconds (0.001–2)
-		sustain: number; // 0–1
-		release: number; // seconds (0.001–4)
-	};
-	filter: {
-		enabled: boolean;
-		cutoff: number; // Hz (20–20 000)
-		resonance: number; // Q factor (0–20)
-	};
+  waveform: OscillatorType; // 'sine' | 'square' | 'sawtooth' | 'triangle'
+  volume: number; // 0–100
+  envelope: {
+    attack: number; // seconds (0.001–2)
+    decay: number; // seconds (0.001–2)
+    sustain: number; // 0–1
+    release: number; // seconds (0.001–4)
+  };
+  filter: {
+    enabled: boolean;
+    cutoff: number; // Hz (20–20 000)
+    resonance: number; // Q factor (0–20)
+  };
 }
 ```
 
@@ -158,28 +158,28 @@ interface SynthSettings {
 
 **Note interactions — desktop (mouse), `'draw'` grid mode**
 
-| Gesture                          | Result                                                        |
-| -------------------------------- | ------------------------------------------------------------- |
-| Click empty space                | Create note at snapped position; drag to set initial duration |
-| Drag note body                   | Move note (pitch + time, snapped)                             |
-| Drag note right edge (last 8 px) | Resize duration (snapped, ≥ 1 snap unit)                      |
-| Right-click note                 | Delete note                                                   |
-| Double-click note                 | Opens the [note inspector](./editing-model.md#note-inspector-precise-numeric-entry) for exact pitch/start/duration/velocity entry |
+| Gesture                          | Result                                                                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Click empty space                | Create note at snapped position; drag to set initial duration                                                                     |
+| Drag note body                   | Move note (pitch + time, snapped)                                                                                                 |
+| Drag note right edge (last 8 px) | Resize duration (snapped, ≥ 1 snap unit)                                                                                          |
+| Right-click note                 | Delete note                                                                                                                       |
+| Double-click note                | Opens the [note inspector](./editing-model.md#note-inspector-precise-numeric-entry) for exact pitch/start/duration/velocity entry |
 
 **Note interactions — touch, `'draw'` grid mode**
 
 Right-click has no touch equivalent, so touch needs its own affordances rather
 than silently losing delete/inspect functionality:
 
-| Gesture                    | Result                                                                 |
-| --------------------------- | ------------------------------------------------------------------------ |
-| Tap empty cell              | Create note at snapped position (default length, no drag-to-size)        |
-| Tap existing note           | Delete note                                                              |
-| Drag note body              | Move note (pitch + time, snapped)                                       |
-| Drag note right edge        | Resize duration                                                          |
-| Long-press note             | Opens the [note inspector](./editing-model.md#note-inspector-precise-numeric-entry) bottom sheet: pitch/start/duration/velocity fields, plus duplicate and delete |
-| Pinch (two-finger)          | Zoom the grid (adjusts `pixelsPerBeat`/`rowHeight` together)             |
-| One-finger drag, empty space | Pans the grid (does **not** create a note — see mode note below)       |
+| Gesture                      | Result                                                                                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tap empty cell               | Create note at snapped position (default length, no drag-to-size)                                                                                                 |
+| Tap existing note            | Delete note                                                                                                                                                       |
+| Drag note body               | Move note (pitch + time, snapped)                                                                                                                                 |
+| Drag note right edge         | Resize duration                                                                                                                                                   |
+| Long-press note              | Opens the [note inspector](./editing-model.md#note-inspector-precise-numeric-entry) bottom sheet: pitch/start/duration/velocity fields, plus duplicate and delete |
+| Pinch (two-finger)           | Zoom the grid (adjusts `pixelsPerBeat`/`rowHeight` together)                                                                                                      |
+| One-finger drag, empty space | Pans the grid (does **not** create a note — see mode note below)                                                                                                  |
 
 Tap-to-delete and long-press-to-inspect are both gestures on an existing
 note, disambiguated by hold duration rather than by anything about the
@@ -206,13 +206,13 @@ grid; drag bars to set per-note velocity (planned).
 
 ### Synth Panel — responsive "Sound drawer"
 
-| Section    | Controls                                            |
-| ---------- | --------------------------------------------------- |
-| Preset     | Dropdown of named presets stored in component state |
+| Section    | Controls                                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preset     | Dropdown of named presets stored in component state                                                                                                                                   |
 | Instrument | Dropdown: **Piano** (`Tone.PolySynth` preset, default) / Sine / Square / Sawtooth / Triangle — see [libraries.md](./libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth) |
-| Volume     | Range slider 0–100 %                                |
-| Tempo      | Range slider 40–240 BPM                             |
-| Envelope ▾ | Attack / Decay / Sustain / Release sliders          |
+| Volume     | Range slider 0–100 %                                                                                                                                                                  |
+| Tempo      | Range slider 40–240 BPM                                                                                                                                                               |
+| Envelope ▾ | Attack / Decay / Sustain / Release sliders                                                                                                                                            |
 
 **Ownership**: `selectedPreset` (the highlighted dropdown entry) is
 component-local `$state`, not part of `store.synthSettings` — it exists only
@@ -241,8 +241,8 @@ Instrument is active — and the existing `'Piano'` preset is renamed to
 something that describes its envelope/filter character rather than an
 instrument name it no longer owns (e.g. `'Warm'`), so only the Instrument
 dropdown's entry is ever called "Piano."
-| Filter ▾   | Enable toggle + Cutoff (Hz) + Resonance sliders     |
-| Effects ▾  | Reserved (reverb / delay — see [libraries.md](./libraries.md#tonejs--adopt-but-its-a-rewrite-not-just-an-addition)) |
+| Filter ▾ | Enable toggle + Cutoff (Hz) + Resonance sliders |
+| Effects ▾ | Reserved (reverb / delay — see [libraries.md](./libraries.md#tonejs--adopt-but-its-a-rewrite-not-just-an-addition)) |
 
 The Sound drawer is a consumer of [overlay-shells.md](./overlay-shells.md#shell-contract)'s
 shared shell, same as the ribbon's parameter drawer and the note inspector —
@@ -254,7 +254,7 @@ drawer on tablet/desktop, per the shell's `isMobile` check.
 ### Default viewport zoom
 
 The underlying pitch range stays C2–B7 (72 rows) regardless of device — only
-the *default visible window* differs: desktop opens showing more of the
+the _default visible window_ differs: desktop opens showing more of the
 range at once, while mobile defaults to roughly 2 octaves visible (scrolling
 for the rest), matching its narrower vertical viewport. This is a default
 `rowHeight`/scroll-position choice, not a change to the data range.

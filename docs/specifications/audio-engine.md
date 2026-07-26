@@ -8,7 +8,7 @@ This covers the two things that turn the `Note[]` document into sound or a
 file: the real-time playback engine (`audio.ts`) and MIDI export
 (`midi-export.ts`). Project-file export/import (the shareable save format)
 is a separate concern, specified in [persistence.md](./persistence.md) —
-this document is about rendering to *audio* or to the *MIDI standard*, not
+this document is about rendering to _audio_ or to the _MIDI standard_, not
 about saving/loading this app's own document.
 
 > This documents the current hand-rolled implementation. See

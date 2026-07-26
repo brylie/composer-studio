@@ -6,7 +6,7 @@ Placeholder-tier, like [tracks.md](./tracks.md)'s chord/arranger sections:
 enough shape to resolve a real architectural ambiguity now, not enough
 detail to commit to final UI. This is explicitly later-stage work, scheduled
 after the v1 single-instrument scope in [README.md](./README.md#scope) —
-written now because it changes what "multiple instruments" *means*
+written now because it changes what "multiple instruments" _means_
 architecturally, and that answer needs to be settled before
 [state-ownership.md](./state-ownership.md) or [selection.md](./selection.md)
 make assumptions that would have to be undone later.
@@ -33,9 +33,9 @@ about pitch or time is actually per-instrument here.
 The resolution: instruments are **layers**, not tracks — a single shared
 `Note[]` collection, one document, one selection, one undo history (exactly
 what Phase 1 already builds), where each note additionally carries a
-`layerId`. Layers are a *stacking and editing* concept borrowed from photo
+`layerId`. Layers are a _stacking and editing_ concept borrowed from photo
 editors (Photoshop-style: reorderable, each with visibility and lock
-toggles, top layer wins on overlap), not a *timeline* concept — deliberately
+toggles, top layer wins on overlap), not a _timeline_ concept — deliberately
 a different word from [timeline.md](./timeline.md)'s "track" (scale/chord/
 arranger/labels), which really is a set of independent, time-indexed event
 sequences. Layers don't have their own timeline; they partition one.
@@ -53,12 +53,12 @@ research went.
 
 ```typescript
 interface Layer {
-	id: string;
-	name: string; // user-editable, e.g. "Piano", "Alto", "Synth Pad"
-	instrument: SynthSettings; // or InstrumentSettings, per libraries.md — one per layer, not one global
-	color: string; // layer-panel swatch; also usable for note-tinting in the grid (see Open questions)
-	visible: boolean;
-	locked: boolean;
+  id: string;
+  name: string; // user-editable, e.g. "Piano", "Alto", "Synth Pad"
+  instrument: SynthSettings; // or InstrumentSettings, per libraries.md — one per layer, not one global
+  color: string; // layer-panel swatch; also usable for note-tinting in the grid (see Open questions)
+  visible: boolean;
+  locked: boolean;
 }
 
 type LayerStack = Layer[]; // array order = panel display order = z-order; index 0 is topmost
@@ -66,8 +66,8 @@ type LayerStack = Layer[]; // array order = panel display order = z-order; index
 
 ```typescript
 interface Note {
-	// ...existing fields (piano-roll.md)
-	layerId: string; // references Layer.id
+  // ...existing fields (piano-roll.md)
+  layerId: string; // references Layer.id
 }
 ```
 
@@ -101,16 +101,16 @@ the ribbon's parameter drawer, the Sound drawer, and the note inspector.
 
 ## Rendering and interaction rules
 
-| Layer state | Renders in note grid | Selectable / editable |
-| --- | --- | --- |
-| Visible, unlocked | Yes | Yes — full pointer interaction |
-| Visible, locked | Yes (dimmed, with a lock affordance) | No — excluded from click/marquee hit-testing and from "select all" |
-| Hidden (regardless of lock) | No | No — can't select what isn't rendered |
+| Layer state                 | Renders in note grid                 | Selectable / editable                                              |
+| --------------------------- | ------------------------------------ | ------------------------------------------------------------------ |
+| Visible, unlocked           | Yes                                  | Yes — full pointer interaction                                     |
+| Visible, locked             | Yes (dimmed, with a lock affordance) | No — excluded from click/marquee hit-testing and from "select all" |
+| Hidden (regardless of lock) | No                                   | No — can't select what isn't rendered                              |
 
 **Overlap, stacking, and z-order**: where two notes from different layers
 occupy the same pitch and overlapping time, the topmost visible layer's
 note renders on top, per the panel's stacking order. This is purely a
-*rendering* rule — it does not change [editing-model.md](./editing-model.md#overlap-policy-notes-may-overlap-freely)'s
+_rendering_ rule — it does not change [editing-model.md](./editing-model.md#overlap-policy-notes-may-overlap-freely)'s
 existing "notes may overlap freely" policy, and it does not affect
 playback: both notes still sound. Layers control what you see and can
 click, never what you hear (see below).
@@ -139,8 +139,8 @@ passage in parallel — so `SelectionContext` gains a layer-equivalent of
 
 ```typescript
 interface SelectionContext {
-	// ...existing fields
-	activeLayers: Layer[]; // distinct layers referenced by `notes`, in panel/z-order
+  // ...existing fields
+  activeLayers: Layer[]; // distinct layers referenced by `notes`, in panel/z-order
 }
 ```
 
@@ -152,25 +152,25 @@ so a consumer can answer "how many distinct voices are in this selection"
 (`activeLayers.length`) or render one swatch per represented layer.
 
 Layer visibility/lock gate selection at two points, not one: marquee-select
-and click only ever hit-test notes on visible, unlocked layers *when a
-selection is being made* (per the table above) — but `selectionContext` is
+and click only ever hit-test notes on visible, unlocked layers _when a
+selection is being made_ (per the table above) — but `selectionContext` is
 a live `$derived.by` ([selection.md](./selection.md#selectioncontext--what-transformations-actually-read)),
 recomputed continuously, not just at the moment of the click. If a note was
 selected while its layer was visible and unlocked, and the user then locks
-or hides that layer *without changing the selection*, the eligibility
+or hides that layer _without changing the selection_, the eligibility
 filter has to be part of the derivation itself, or the stale note would
 still count toward `selectionContext.notes`/`activeLayers` even though it's
 no longer interactable:
 
 ```typescript
 const notes = store.notes.filter(
-	(n) => selectedNoteIds.has(n.id) && isLayerSelectable(layerFor(n.layerId))
+  (n) => selectedNoteIds.has(n.id) && isLayerSelectable(layerFor(n.layerId)),
 );
 ```
 
 `selectedNoteIds` itself is left untouched by a layer-state change — it
 still records "what was clicked." Locking or hiding a layer just makes its
-notes drop out of the *effective* selection (so a transform run right after
+notes drop out of the _effective_ selection (so a transform run right after
 only touches what's actually eligible); unlocking or re-showing the layer
 brings them back into `selectionContext` automatically, with no separate
 reconciliation step needed, since it's the same reactive filter running
@@ -231,6 +231,6 @@ of "one instrument voice," not a redesign.
   actually built.
 - **Locked-layer note inspector access** — is a locked note fully
   unreachable (can't even open the [note inspector](./editing-model.md#note-inspector-precise-numeric-entry)
-  to look at its exact values), or just unreachable for *mutation*? Leaning
+  to look at its exact values), or just unreachable for _mutation_? Leaning
   toward view-only inspector access being fine even when locked, since it's
   read, not edit — not decided here.

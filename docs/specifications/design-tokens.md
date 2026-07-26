@@ -21,7 +21,7 @@ This project uses **Tailwind v4's CSS-first configuration** — there is no
 `tailwind.config.js`. Tokens are declared with an `@theme` block directly in
 CSS, which both defines a CSS custom property (`--color-...`, `--spacing-...`)
 and generates the matching utility classes (`bg-...`, `p-...`) automatically.
-That means writing tokens *is* configuring Tailwind; there's no separate
+That means writing tokens _is_ configuring Tailwind; there's no separate
 token file to keep in sync with a config object.
 
 Recommendation: split the token declarations out of `layout.css` into a
@@ -30,10 +30,10 @@ sibling `src/routes/theme.css`, imported first:
 ```css
 /* theme.css */
 @theme {
-	--color-surface: #1a1a2e;
-	--color-surface-raised: #232342;
-	--color-accent: #7c5cff;
-	/* ... */
+  --color-surface: #1a1a2e;
+  --color-surface-raised: #232342;
+  --color-accent: #7c5cff;
+  /* ... */
 }
 ```
 
@@ -46,11 +46,11 @@ sibling `src/routes/theme.css`, imported first:
 
 html,
 body {
-	margin: 0;
-	padding: 0;
-	height: 100%;
-	overflow: hidden;
-	background: var(--color-surface);
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-surface);
 }
 ```
 
@@ -66,14 +66,14 @@ not speculatively ahead of it.
 
 ### Color
 
-| Token | Used by | Notes |
-| --- | --- | --- |
-| `--color-surface`, `--color-surface-raised` | App background, ribbon/drawer panels | `--color-surface` already exists as a hardcoded hex; becomes a named token |
-| `--color-accent` | Primary actions, active tab indicator, playhead | One accent, not a full brand palette — matches this project's scope |
-| `--color-scale-degree` | [tracks.md](./tracks.md#context-aware-highlighting) note-grid highlight for in-scale pitches | Outline/border color, not a fill — notes stay legible |
-| `--color-loop-band` | [piano-roll.md](./piano-roll.md#ruler) loop region on the ruler | Semi-transparent, layered under the ruler's bar numbers |
-| `--color-section-{n}` (a small fixed palette, e.g. 6–8 colors) | [tracks.md](./tracks.md#arranger-track-placeholder) arranger section blocks | Sections cycle through this palette by creation order; not user-customizable in v1 — an open future enhancement, not a gap |
-| `--color-danger` | Delete/clear actions, destructive confirmation states | |
+| Token                                                          | Used by                                                                                      | Notes                                                                                                                      |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `--color-surface`, `--color-surface-raised`                    | App background, ribbon/drawer panels                                                         | `--color-surface` already exists as a hardcoded hex; becomes a named token                                                 |
+| `--color-accent`                                               | Primary actions, active tab indicator, playhead                                              | One accent, not a full brand palette — matches this project's scope                                                        |
+| `--color-scale-degree`                                         | [tracks.md](./tracks.md#context-aware-highlighting) note-grid highlight for in-scale pitches | Outline/border color, not a fill — notes stay legible                                                                      |
+| `--color-loop-band`                                            | [piano-roll.md](./piano-roll.md#ruler) loop region on the ruler                              | Semi-transparent, layered under the ruler's bar numbers                                                                    |
+| `--color-section-{n}` (a small fixed palette, e.g. 6–8 colors) | [tracks.md](./tracks.md#arranger-track-placeholder) arranger section blocks                  | Sections cycle through this palette by creation order; not user-customizable in v1 — an open future enhancement, not a gap |
+| `--color-danger`                                               | Delete/clear actions, destructive confirmation states                                        |                                                                                                                            |
 
 ### Spacing / sizing
 
@@ -82,10 +82,10 @@ multiplies for `p-1`/`p-2`/etc.) covers general layout. Two music-specific
 sizing tokens are worth naming explicitly because they're referenced by
 piano-roll.md's zoom behavior and aren't just "spacing":
 
-| Token | Used by |
-| --- | --- |
-| `--piano-key-height` | Piano Keys column row height at 1x zoom — the unit note-grid row height derives from |
-| `--ribbon-height` | [ribbon.md](./ribbon.md) desktop ribbon height, needed by layout code that reserves space for it above the grid |
+| Token                | Used by                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `--piano-key-height` | Piano Keys column row height at 1x zoom — the unit note-grid row height derives from                            |
+| `--ribbon-height`    | [ribbon.md](./ribbon.md) desktop ribbon height, needed by layout code that reserves space for it above the grid |
 
 ### Typography
 

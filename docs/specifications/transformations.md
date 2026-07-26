@@ -17,48 +17,75 @@ undoable.
 
 ```typescript
 interface ParamFieldBase {
-	key: string;
-	label: string;
-	// Omitted = always shown. Present = the drawer re-evaluates this against
-	// the current in-progress values on every change, hiding the field when
-	// it returns false — e.g. `invert`'s customPivot only makes sense once
-	// `pivot === 'custom'` is chosen.
-	showIf?: (values: Record<string, unknown>) => boolean;
+  key: string;
+  label: string;
+  // Omitted = always shown. Present = the drawer re-evaluates this against
+  // the current in-progress values on every change, hiding the field when
+  // it returns false — e.g. `invert`'s customPivot only makes sense once
+  // `pivot === 'custom'` is chosen.
+  showIf?: (values: Record<string, unknown>) => boolean;
 }
 
 type ParamField =
-	| (ParamFieldBase & { type: 'number'; min?: number; max?: number; step?: number; default: number })
-	| (ParamFieldBase & { type: 'range'; min: number; max: number; step?: number; default: number })
-	| (ParamFieldBase & { type: 'select'; options: { value: string; label: string }[]; default: string })
-	| (ParamFieldBase & { type: 'boolean'; default: boolean })
-	// A paired min/max value, e.g. generate-chords's octaveRange — distinct
-	// from 'range' above, which is one continuous value on a single slider.
-	| (ParamFieldBase & { type: 'number-range'; min: number; max: number; step?: number; default: { min: number; max: number } });
+  | (ParamFieldBase & {
+      type: 'number';
+      min?: number;
+      max?: number;
+      step?: number;
+      default: number;
+    })
+  | (ParamFieldBase & { type: 'range'; min: number; max: number; step?: number; default: number })
+  | (ParamFieldBase & {
+      type: 'select';
+      options: { value: string; label: string }[];
+      default: string;
+    })
+  | (ParamFieldBase & { type: 'boolean'; default: boolean })
+  // A paired min/max value, e.g. generate-chords's octaveRange — distinct
+  // from 'range' above, which is one continuous value on a single slider.
+  | (ParamFieldBase & {
+      type: 'number-range';
+      min: number;
+      max: number;
+      step?: number;
+      default: { min: number; max: number };
+    });
 
-interface CommandDescriptor<TParams extends Record<string, unknown> = Record<string, never>> {
-	id: string; // stable, kebab-case — e.g. "transpose"
-	category: 'transform' | 'generate' | 'export' | 'view' | 'transport';
-	labelKey: string; // Paraglide message key, not a raw string — see ribbon.md i18n
-	descriptionKey?: string;
-	icon: string; // icon identifier, resolved by the ribbon's icon set
-	keywords?: string[]; // extra terms for command-palette search
-	shortcut?: string;
-	params?: ParamField[]; // omitted = one-click command, no drawer
-	isApplicable(ctx: CommandContext): boolean;
-	// Only consulted when isApplicable(ctx) is false, to drive the disabled
-	// tooltip (e.g. "Select at least 2 notes"). Separate from isApplicable
-	// rather than folded into a richer return type so every existing
-	// `ctx.count >= 1`-style boolean rule stays exactly as terse as written
-	// below — most commands' disabled state is self-explanatory from their
-	// label plus the ribbon's own selection-count display, and can skip
-	// this; a generic labelKey (e.g. "Not available for this selection")
-	// is the fallback when a command omits it.
-	getDisabledReasonKey?(ctx: CommandContext): string;
-	// Exactly one of `run` or `effect` — see "Export commands are effects,
-	// not transforms" below for why file I/O can't go through `run()`.
-	run?(ctx: CommandContext, params: TParams): { notes: Note[]; label: string };
-	effect?(ctx: CommandContext, params: TParams): Promise<void>;
+interface CommandDescriptorBase<TParams extends Record<string, unknown> = Record<string, never>> {
+  id: string; // stable, kebab-case — e.g. "transpose"
+  category: 'transform' | 'generate' | 'export' | 'view' | 'transport';
+  labelKey: string; // Paraglide message key, not a raw string — see ribbon.md i18n
+  descriptionKey?: string;
+  icon: string; // icon identifier, resolved by the ribbon's icon set
+  keywords?: string[]; // extra terms for command-palette search
+  shortcut?: string;
+  params?: ParamField[]; // omitted = one-click command, no drawer
+  isApplicable(ctx: CommandContext): boolean;
+  // Only consulted when isApplicable(ctx) is false, to drive the disabled
+  // tooltip (e.g. "Select at least 2 notes"). Separate from isApplicable
+  // rather than folded into a richer return type so every existing
+  // `ctx.count >= 1`-style boolean rule stays exactly as terse as written
+  // below — most commands' disabled state is self-explanatory from their
+  // label plus the ribbon's own selection-count display, and can skip
+  // this; a generic labelKey (e.g. "Not available for this selection")
+  // is the fallback when a command omits it.
+  getDisabledReasonKey?(ctx: CommandContext): string;
 }
+
+// Exactly one of `run` or `effect` — enforced as a union rather than two
+// optional properties, so a descriptor with neither or both fails
+// type-checking instead of only failing at runtime. See "Export commands
+// are effects, not transforms" below for why file I/O can't go through
+// `run()`.
+type CommandDescriptor<TParams extends Record<string, unknown> = Record<string, never>> =
+  | (CommandDescriptorBase<TParams> & {
+      run(ctx: CommandContext, params: TParams): { notes: Note[]; label: string };
+      effect?: never;
+    })
+  | (CommandDescriptorBase<TParams> & {
+      run?: never;
+      effect(ctx: CommandContext, params: TParams): Promise<void>;
+    });
 ```
 
 `ParamFieldBase.showIf` and the `'number-range'` variant both exist because
@@ -86,9 +113,9 @@ continue to work unchanged:
 
 ```typescript
 interface CommandContext extends SelectionContext {
-	allNotes: Note[]; // the whole document's notes, not just the selection — see run()'s return contract below
-	playhead: number; // current playhead beat — where a selection-free generator (Euclidean rhythm, ostinato) inserts
-	chordTrack: ChordEvent[]; // full track; generate-chords (source: 'chord-track') resolves its own target range from this plus `playhead`/`beatRange`
+  allNotes: Note[]; // the whole document's notes, not just the selection — see run()'s return contract below
+  playhead: number; // current playhead beat — where a selection-free generator (Euclidean rhythm, ostinato) inserts
+  chordTrack: ChordEvent[]; // full track; generate-chords (source: 'chord-track') resolves its own target range from this plus `playhead`/`beatRange`
 }
 ```
 
@@ -129,14 +156,14 @@ second, separately-maintained derivation.
 ```typescript
 // registry/index.svelte.ts
 export const commandRegistry: CommandDescriptor[] = [
-	...transformCommands,
-	...generateCommands,
-	...exportCommands
+  ...transformCommands,
+  ...generateCommands,
+  ...exportCommands,
 ];
 ```
 
 A plain array is sufficient — the registry is authored, not runtime-mutated,
-so it doesn't need `$state`. Reactivity lives in the *derived* per-command
+so it doesn't need `$state`. Reactivity lives in the _derived_ per-command
 `enabled` flag (`$derived(command.isApplicable(selectionContext))`), computed
 where a command is rendered (ribbon button, palette row), not in the registry
 itself. Splitting `transformCommands`/`generateCommands`/`exportCommands` into
@@ -164,19 +191,19 @@ requirements — there's no shared "selection is non-empty" gate imposed
 centrally, because some generators (Euclidean rhythm, ostinato) don't need a
 selection at all, they need an insertion point. Examples:
 
-| Command      | Applicability rule                                  |
-| ------------ | ---------------------------------------------------- |
-| Retrograde   | `ctx.count >= 1`                                     |
-| Inversion    | `ctx.count >= 1`                                     |
-| Permutation  | `ctx.count >= 2`                                     |
-| Fragmentation| `ctx.count >= 2`                                     |
-| Re-harmonization | `ctx.count >= 1 && ctx.activeScales.length === 1` |
+| Command                    | Applicability rule                                              |
+| -------------------------- | --------------------------------------------------------------- |
+| Retrograde                 | `ctx.count >= 1`                                                |
+| Inversion                  | `ctx.count >= 1`                                                |
+| Permutation                | `ctx.count >= 2`                                                |
+| Fragmentation              | `ctx.count >= 2`                                                |
+| Re-harmonization           | `ctx.count >= 1 && ctx.activeScales.length === 1`               |
 | Euclidean rhythm generator | always applicable (writes at `ctx.playhead`, not the selection) |
 
 When a command is disabled, both the ribbon button and the palette row stay
 visible but greyed out with a reason (e.g. "Select at least 2 notes") rather
 than disappearing — discoverability over minimalism, and it's what makes the
-palette useful as a way to *learn* what's possible. The reason text comes
+palette useful as a way to _learn_ what's possible. The reason text comes
 from `CommandDescriptor.getDisabledReasonKey(ctx)` above, not from
 `isApplicable` itself — a boolean alone has no channel to carry a specific
 explanation, and most commands can rely on the generic fallback rather than
@@ -191,33 +218,33 @@ of scope for this document and happens per-command as it's implemented.
 
 ### Transform
 
-| id | Params |
-| --- | --- |
-| `transpose` | `semitones: number` |
-| `invert` | `pivot: 'first-note' \| 'selection-center' \| 'custom'`, `customPivot?: number` |
-| `retrograde` | — |
-| `augmentation` | `ratio: number` (e.g. 2 = double durations) |
-| `diminution` | `ratio: number` |
-| `metric-modulation` | `ratio: number`, `requantize: boolean` |
-| `fragmentation` | `fragmentBeats: number` |
-| `truncation` | `keepBeats: number` |
-| `expansion` | `insertBeats: number` |
-| `reharmonization` | `strategy: 'select'`, `targetScale: string` |
-| `mode-shift` | `targetMode: 'select'` |
-| `voice-leading-adapt` | `targetChord: string` |
-| `permutation` | `seed: number` |
-| `jitter` | `timeAmount: range`, `pitchAmount: range`, `velocityAmount: range`, `seed: number` |
+| id                    | Params                                                                             |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| `transpose`           | `semitones: number`                                                                |
+| `invert`              | `pivot: 'first-note' \| 'selection-center' \| 'custom'`, `customPivot?: number`    |
+| `retrograde`          | —                                                                                  |
+| `augmentation`        | `ratio: number` (e.g. 2 = double durations)                                        |
+| `diminution`          | `ratio: number`                                                                    |
+| `metric-modulation`   | `ratio: number`, `requantize: boolean`                                             |
+| `fragmentation`       | `fragmentBeats: number`                                                            |
+| `truncation`          | `keepBeats: number`                                                                |
+| `expansion`           | `insertBeats: number`                                                              |
+| `reharmonization`     | `strategy: 'select'`, `targetScale: string`                                        |
+| `mode-shift`          | `targetMode: 'select'`                                                             |
+| `voice-leading-adapt` | `targetChord: string`                                                              |
+| `permutation`         | `seed: number`                                                                     |
+| `jitter`              | `timeAmount: range`, `pitchAmount: range`, `velocityAmount: range`, `seed: number` |
 | `duplicate-selection` | — see [editing-model.md](./editing-model.md#duplicate-in-place-repeat-this-phrase) |
 
 ### Generate
 
-| id | Params |
-| --- | --- |
-| `arpeggiate` | `pattern: 'up' \| 'down' \| 'up-down' \| 'random'`, `rateBeats: number` |
-| `euclidean-rhythm` | `steps: number`, `pulses: number`, `rotation: number` |
-| `motif-generate` | `lengthBeats: number`, `seed: number` |
-| `ostinato-generate` | `lengthBeats: number`, `repeats: number` |
-| `generate-chords` | `octaveRange: { min, max }`, `voiceCount: number`, `voicingStrategy: 'closed' \| 'open' \| 'drop2' \| 'smooth-voice-leading'`, `source: 'chord-track' \| 'selection-derived'`, `targetRange?: { min: number; max: number }` (beats — required for `source: 'chord-track'`; ignored for `'selection-derived'`, which uses the selection's own range) |
+| id                  | Params                                                                                                                                                                                                                                                                                                                                              |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `arpeggiate`        | `pattern: 'up' \| 'down' \| 'up-down' \| 'random'`, `rateBeats: number`                                                                                                                                                                                                                                                                             |
+| `euclidean-rhythm`  | `steps: number`, `pulses: number`, `rotation: number`                                                                                                                                                                                                                                                                                               |
+| `motif-generate`    | `lengthBeats: number`, `seed: number`                                                                                                                                                                                                                                                                                                               |
+| `ostinato-generate` | `lengthBeats: number`, `repeats: number`                                                                                                                                                                                                                                                                                                            |
+| `generate-chords`   | `octaveRange: { min, max }`, `voiceCount: number`, `voicingStrategy: 'closed' \| 'open' \| 'drop2' \| 'smooth-voice-leading'`, `source: 'chord-track' \| 'selection-derived'`, `targetRange?: { min: number; max: number }` (beats — required for `source: 'chord-track'`; ignored for `'selection-derived'`, which uses the selection's own range) |
 
 #### `generate-chords` is the priority v1 case
 
@@ -251,8 +278,8 @@ and the only additions are the newly voiced chord notes. Two source modes:
   chord track exists, and worth keeping even after, for a quick "harmonize
   this melody" pass.
 
-This is distinct from `reharmonization` (recolors the harmony of *existing*
-selected notes in place) and `voice-leading-adapt` (nudges *existing* selected
+This is distinct from `reharmonization` (recolors the harmony of _existing_
+selected notes in place) and `voice-leading-adapt` (nudges _existing_ selected
 chord notes toward smoother voice leading against a target) — both of those
 transform notes that already exist; `generate-chords` adds notes that didn't
 exist before. All three can reasonably share the same underlying
@@ -265,10 +292,10 @@ registry means "Export MIDI" becomes a `CommandDescriptor` like any other,
 which is what lets it appear in both the ribbon's Export tab and the palette
 without special-casing.
 
-| id | Params |
-| --- | --- |
-| `export-midi` | — (exists today, outside the registry) |
-| `export-project` | — writes the full round-trippable project file, see [persistence.md](./persistence.md) |
+| id               | Params                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `export-midi`    | — (exists today, outside the registry)                                                                    |
+| `export-project` | — writes the full round-trippable project file, see [persistence.md](./persistence.md)                    |
 | `import-project` | — opens a file picker; confirms before discarding unsaved changes, see [persistence.md](./persistence.md) |
 
 #### Export commands are effects, not transforms
@@ -314,7 +341,7 @@ steps below.
    it only computes a result, it doesn't touch `$state` — so calling it
    commits nothing by itself. Only on success does the caller
    `history.record(result.label, () => currentSnapshot())` (capturing the
-   *pre-mutation* document, per [command-history.md](./command-history.md#api)),
+   _pre-mutation_ document, per [command-history.md](./command-history.md#api)),
    then apply `result.notes` as the actual mutation. A thrown `run()` skips
    both steps entirely: no history entry, no state change — there's no
    window where a history entry exists for a mutation that never happened,

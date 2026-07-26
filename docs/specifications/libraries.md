@@ -14,14 +14,14 @@ They have very different adoption costs, addressed separately below.
 Several specs in this directory currently say "vocabulary TBD" or hand-wave a
 pitch-class computation that tonal.js already solves, well-tested, for free:
 
-| Spec placeholder | tonal.js equivalent |
-| --- | --- |
-| `pitchClassesFor(root, mode)` in [tracks.md](./tracks.md#context-aware-highlighting) | `Scale.get(`${root} ${mode}`).notes`, mapped to pitch classes |
-| `ScaleEvent.mode` "TBD" vocabulary | tonal's scale name strings (`'major'`, `'dorian'`, `'harmonic minor'`, ...) — a large, standard, already-named set |
-| `pitchClassesForChord(chord)` in [tracks.md](./tracks.md#chordevent-carries-a-pitch-class-set-not-just-a-label) | `Chord.get(`${root}${quality}`).notes` |
-| `ChordEvent.quality` "TBD" vocabulary | tonal's chord symbol vocabulary (`'maj7'`, `'sus4'`, `'m7b5'`, ...) |
-| `mode-shift` / `reharmonization` target selection in [transformations.md](./transformations.md) | `Scale.get`/`Key.majorKey`/`Key.minorKey` for scale-degree and relative-key relationships |
-| Voice-leading math for `generate-chords` and `voice-leading-adapt` | `@tonaljs/voice-leading`'s voicing helpers as a starting point — likely needs the app's own smoothing logic layered on top, but not built from zero |
+| Spec placeholder                                                                                                | tonal.js equivalent                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pitchClassesFor(root, mode)` in [tracks.md](./tracks.md#context-aware-highlighting)                            | `Scale.get(`${root} ${mode}`).notes`, mapped to pitch classes                                                                                       |
+| `ScaleEvent.mode` "TBD" vocabulary                                                                              | tonal's scale name strings (`'major'`, `'dorian'`, `'harmonic minor'`, ...) — a large, standard, already-named set                                  |
+| `pitchClassesForChord(chord)` in [tracks.md](./tracks.md#chordevent-carries-a-pitch-class-set-not-just-a-label) | `Chord.get(`${root}${quality}`).notes`                                                                                                              |
+| `ChordEvent.quality` "TBD" vocabulary                                                                           | tonal's chord symbol vocabulary (`'maj7'`, `'sus4'`, `'m7b5'`, ...)                                                                                 |
+| `mode-shift` / `reharmonization` target selection in [transformations.md](./transformations.md)                 | `Scale.get`/`Key.majorKey`/`Key.minorKey` for scale-degree and relative-key relationships                                                           |
+| Voice-leading math for `generate-chords` and `voice-leading-adapt`                                              | `@tonaljs/voice-leading`'s voicing helpers as a starting point — likely needs the app's own smoothing logic layered on top, but not built from zero |
 
 This is a low-risk adoption: it's mostly filling in logic these specs already
 call for but leave as "TBD" or a hand-rolled interval table, not replacing
@@ -57,14 +57,14 @@ monolith — pull in only the pieces the adapter module above actually needs.
 `OscillatorNode → BiquadFilterNode → GainNode` graphs with manual ADSR
 automation. Tone.js would replace that machinery, not sit alongside it:
 
-| Current `audio.ts` | Tone.js equivalent |
-| --- | --- |
-| Manual `setInterval` lookahead scheduler | `Tone.Transport` (sample-accurate scheduling, drift-corrected) |
-| Manual loop-iteration math | `Tone.Transport.loop` / `loopStart` / `loopEnd` — maps directly onto this app's `loopStart`/`loopEnd`/`loopEnabled` fields from [piano-roll.md](./piano-roll.md#ruler) |
-| Hand-built oscillator graph per note | `Tone.PolySynth` (voice allocation included — relevant once `generate-chords` produces simultaneous notes) |
-| Manual ADSR via `GainNode.gain` automation | Built into `Tone.Synth`'s envelope |
-| "Effects ▾ Reserved (reverb / delay — future work)" in [piano-roll.md](./piano-roll.md#synth-panel--responsive-sound-drawer) | `Tone.Reverb`, `Tone.FeedbackDelay`, `Tone.Chorus`, `Tone.Distortion`, etc. — this future-work placeholder exists mainly *because* building effects on raw Web Audio nodes is exactly the tedious work Tone.js exists to remove |
-| Single global `tempo` | `Tone.Transport.bpm`, a signal — can schedule changes at specific transport times, which lines up with the multi-`TempoEvent` track in [timeline.md](./timeline.md) |
+| Current `audio.ts`                                                                                                           | Tone.js equivalent                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manual `setInterval` lookahead scheduler                                                                                     | `Tone.Transport` (sample-accurate scheduling, drift-corrected)                                                                                                                                                                  |
+| Manual loop-iteration math                                                                                                   | `Tone.Transport.loop` / `loopStart` / `loopEnd` — maps directly onto this app's `loopStart`/`loopEnd`/`loopEnabled` fields from [piano-roll.md](./piano-roll.md#ruler)                                                          |
+| Hand-built oscillator graph per note                                                                                         | `Tone.PolySynth` (voice allocation included — relevant once `generate-chords` produces simultaneous notes)                                                                                                                      |
+| Manual ADSR via `GainNode.gain` automation                                                                                   | Built into `Tone.Synth`'s envelope                                                                                                                                                                                              |
+| "Effects ▾ Reserved (reverb / delay — future work)" in [piano-roll.md](./piano-roll.md#synth-panel--responsive-sound-drawer) | `Tone.Reverb`, `Tone.FeedbackDelay`, `Tone.Chorus`, `Tone.Distortion`, etc. — this future-work placeholder exists mainly _because_ building effects on raw Web Audio nodes is exactly the tedious work Tone.js exists to remove |
+| Single global `tempo`                                                                                                        | `Tone.Transport.bpm`, a signal — can schedule changes at specific transport times, which lines up with the multi-`TempoEvent` track in [timeline.md](./timeline.md)                                                             |
 
 The recommendation is still **yes** — the alternative is hand-maintaining
 scheduler edge cases (drift, lookahead sizing) and building a reverb/delay
@@ -95,21 +95,21 @@ async-loading-failure concerns into the MVP timeline for a feature that
 doesn't block proving out the ribbon/transform/generate workflow this whole
 spec set is centered on — the actual priority use case (voice-led chord
 generation + melody variation on one timeline, per
-[README.md](./README.md#scope)) doesn't need a convincing piano *timbre*, it
-needs correct *notes*. A synth-based piano is enough to judge that, and adds
+[README.md](./README.md#scope)) doesn't need a convincing piano _timbre_, it
+needs correct _notes_. A synth-based piano is enough to judge that, and adds
 zero new external dependencies beyond Tone.js itself:
 
 ```typescript
 const filter = new Tone.Filter({ frequency: 4000, Q: 1, type: 'lowpass' });
 
 const piano = new Tone.PolySynth(Tone.Synth, {
-	oscillator: { type: 'triangle' }, // closer to piano harmonic content than a sine
-	envelope: {
-		attack: 0.005,
-		decay: 0.1,
-		sustain: 0.3,
-		release: 1
-	}
+  oscillator: { type: 'triangle' }, // closer to piano harmonic content than a sine
+  envelope: {
+    attack: 0.005,
+    decay: 0.1,
+    sustain: 0.3,
+    release: 1,
+  },
 }).connect(filter);
 
 filter.toDestination();
