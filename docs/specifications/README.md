@@ -20,7 +20,7 @@ sequencing (what to build first and why), see [roadmap.md](./roadmap.md).
 | [command-palette.md](./command-palette.md) | Future milestone — searchable command palette over the same registry |
 | [accessibility.md](./accessibility.md) | Living cross-cutting standard referenced by all of the above |
 | [state-ownership.md](./state-ownership.md) | Application state lives behind a root-provided Svelte context, not a bare module singleton — supports nested overrides for multi-instance and test isolation |
-| [libraries.md](./libraries.md) | tonal.js (music theory) and Tone.js (audio, incl. sampled piano) — what they replace, and the adoption cost of each |
+| [libraries.md](./libraries.md) | tonal.js (music theory) and Tone.js (audio) — what they replace, the adoption cost of each, and why sampled instruments are deferred past MVP in favor of a `PolySynth` piano |
 | [audio-engine.md](./audio-engine.md) | The current hand-rolled playback scheduler and MIDI export |
 | [design-tokens.md](./design-tokens.md) | Color/spacing tokens via Tailwind v4's `@theme`, and what other specs reference by name (scale highlight, loop band, section colors) |
 | [persistence.md](./persistence.md) | Project save/load (autosave + IndexedDB) and the shareable project-file format |
@@ -56,9 +56,12 @@ spec:
   document at once.
 - **No staff notation** — view or export. The piano roll is the only
   representation; MusicXML/engraving is not planned.
-- **Sampled piano is the primary instrument**, not synth-only — realism
-  matters here because the point is judging the actual music, not exploring
-  synth timbres (see [libraries.md](./libraries.md#sampled-piano-as-the-primary-instrument)).
+- **MVP instrument is a `Tone.PolySynth` piano preset, not a sampled one.**
+  Realistic sampled piano sound is a reasonable later addition, but not
+  before the ribbon/transform/generate workflow this spec set centers on is
+  proven out — sample licensing, hosting, and load-failure handling are real
+  scope that the priority use case (correct notes, not piano timbre) doesn't
+  need yet (see [libraries.md](./libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth)).
 - **This is a compositional tool, not a practice app.** No MIDI import (see
   [audio-engine.md](./audio-engine.md#midi-import-not-planned)), no
   metronome, count-in, or slow-practice-tempo features. Nothing here rules

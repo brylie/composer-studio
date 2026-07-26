@@ -102,14 +102,18 @@ is the same model as MIDI meta-events (tempo, time signature) and is what makes
 scale/chord/arranger tracks a family rather than three unrelated features.
 
 ```typescript
-interface TimelineEvent<TPayload> {
-	id: string;
-	beat: number;
-	payload: TPayload;
-}
+type TimelineEvent<TPayload> = { id: string; beat: number } & TPayload;
 
 type EventTrack<TPayload> = TimelineEvent<TPayload>[]; // kept sorted by beat
 ```
+
+An intersection, not a nested `payload` property — every concrete event
+type below (`ScaleEvent`, `ChordEvent`, `TempoEvent`, ...) already declares
+`root`/`mode`, `bpm`, etc. as flat fields alongside `id`/`beat`, not wrapped
+in a `payload` object. `TimelineEvent<{ root: number; mode: string }>` is
+exactly the flattened shape `{ id, beat, root, mode }` — so
+`type ScaleTrack = ScaleEvent[]` genuinely satisfies `EventTrack<ScaleEvent>`
+as written, rather than only being described as one.
 
 ### Resolving "the active value at beat X"
 
@@ -121,6 +125,21 @@ function activeEventAt<T>(track: EventTrack<T>, beat: number): TimelineEvent<T> 
 
 Every consumer (note grid highlighting, ruler rendering, export) asks the track
 "what's active here?" rather than maintaining its own copy of the current value.
+
+**Beats are unique per track.** Two events at the identical beat would make
+"last event with `beat <= beat`" ambiguous — which one is "last" depends on
+insertion order or search-implementation detail, not anything meaningful
+about the document. Rather than defining a tie-break rule for
+`activeEventAt` to apply at read time, the write side prevents the
+ambiguity from existing at all: placing a new event at a beat that already
+has one on that track **replaces** the existing event there, the same way
+dragging a scale-marker to an occupied position would visually just move it,
+not stack a second marker on top. This is specific to event tracks (a
+context value like "the active scale" can only be one thing at a time at a
+given beat) — it has no bearing on notes, where multiple simultaneous notes
+at the same beat are normal and already covered by
+[editing-model.md](./editing-model.md#overlap-policy-notes-may-overlap-freely)'s
+overlap policy.
 
 ### Track types built on this abstraction
 
@@ -189,16 +208,24 @@ component that consumes this.
 
 ```typescript
 interface TempoEvent {
+	id: string;
 	beat: number;
 	bpm: number;
 }
 
 interface TimeSignatureEvent {
+	id: string;
 	beat: number;
 	numerator: number;
 	denominator: number;
 }
 ```
+
+`id` matches `ScaleEvent`/`ChordEvent`/`LabelEvent` ([tracks.md](./tracks.md))
+— any UI that lets a user drag or delete one specific tempo/time-signature
+marker needs a stable reference to it that survives the array being
+resorted or another event being inserted before it; an array index doesn't
+survive that, an `id` does.
 
 `store.svelte.ts`'s single `tempo: number` becomes the payload of the first
 `TempoEvent` at beat 0; a project with no further tempo events behaves exactly

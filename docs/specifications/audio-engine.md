@@ -41,8 +41,11 @@ policies require a user gesture before audio can start).
 
 When `loopEnabled` is `true`, the scheduler calculates the loop iteration for
 each note and schedules it accordingly; the playhead wraps at `totalBeats`
-today — see [piano-roll.md](./piano-roll.md#ruler) for the planned
-`loopStart`/`loopEnd` region (not yet wired into the scheduler).
+today, with no adjustable in/out points. `loopStart`/`loopEnd` are a planned
+Ruler feature ([piano-roll.md](./piano-roll.md#ruler)) — they don't exist on
+`EditorState`/`store.svelte.ts` yet, so there's nothing for the scheduler to
+read even once it's updated; both the data fields and the scheduler change
+land together as one piece of future work, not two.
 
 ### Frequency mapping
 

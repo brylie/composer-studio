@@ -21,7 +21,7 @@ a set of tuned targets to build against now.
    [selection.md](./selection.md#selectioncontext--what-transformations-actually-read)
    sorts and filters the full note array on every selection or note-array
    change. Fine at small scale; revisit if profiling shows it's hot.
-4. **Whole-document undo snapshots** — [command-history.md](./command-history.md#generalising-beyond-notearray)
+4. **Whole-document undo snapshots** — [command-history.md](./command-history.md#generalising-beyond-note)
    already names this trade-off explicitly ("revisit only if profiling says
    otherwise") — repeated here so it's not missed in a performance sweep.
 5. **Command applicability re-evaluation** — every ribbon button's

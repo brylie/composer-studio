@@ -37,9 +37,9 @@ function updateNote(id: string, updates: Partial<Note>): void; // existing
 | --- | --- |
 | `midiNote` | Clamped to `[MIN_MIDI, MAX_MIDI]` (36–107). A drag naturally can't exceed this since there's nothing rendered beyond it, but **programmatic** mutations (transpose, invert, jitter) must clamp explicitly — nothing currently states this for [`transpose`](./transformations.md#transform) |
 | `startBeat` | Clamped to `>= 0` |
-| `durationBeats` | Minimum one snap unit (`snapBeats`) — existing behavior for drag-resize, applies equally to any command that sets duration (augmentation, diminution) |
+| `durationBeats` | Minimum `MIN_DURATION_BEATS` (a small fixed constant, e.g. `1/64` — **not** `snapBeats`, which is mutable and would otherwise make a note's validity depend on whatever the user's snap setting happens to be later; see below) |
 | `velocity` | Clamped to `[1, 127]` |
-| Grid-gesture positions | Snapped to `snapBeats`/semitone as today. **Non-gesture writers are exempt** — pasted notes preserve their exact relative offset from the clipboard rather than being re-snapped (see [selection.md](./selection.md#clipboard-copypaste)), and `jitter` ([transformations.md](./transformations.md)) exists specifically to produce sub-snap positions. Snapping is an input-gesture behavior, not a stored-data constraint — consistent with [timeline.md](./timeline.md#continuous-beats-not-a-fixed-step-grid) |
+| Grid-gesture positions | Snapped to `snapBeats`/semitone as today. **Non-gesture writers are exempt** — pasted notes preserve their exact relative offset from the clipboard rather than being re-snapped (see [selection.md](./selection.md#clipboard-copypaste)), and `jitter` ([transformations.md](./transformations.md)) exists specifically to produce sub-snap positions. Snapping is an input-gesture behavior, not a stored-data constraint — consistent with [timeline.md](./timeline.md#continuous-beats-not-a-fixed-step-grid). The same split applies to duration above: a drag-resize gesture is bounded by the *current* `snapBeats` (so it can't produce a note shorter than what's currently snappable), but that's a gesture-time input constraint, not what makes a stored note's `durationBeats` valid — those are different numbers on purpose |
 
 ### Overlap policy: notes may overlap freely
 
@@ -59,6 +59,18 @@ the current `totalBeats`, `totalBeats` extends to fit — snapped up to the
 next full bar — rather than clipping the note or silently leaving it beyond
 the visible/loopable range. This keeps "just keep playing/writing past the
 end" from being a dead end.
+
+Because time signature is itself a variable event track
+([timeline.md](./timeline.md#track-types-built-on-this-abstraction)), "a
+full bar" isn't a fixed number of beats — the time signature **active at the
+note's own end beat** (via `activeEventAt(timeSignatureTrack, note.endBeat)`,
+not whatever signature happens to be active at the old `totalBeats`) governs
+the rounding. If the note's end beat falls in a 3/4 region, the extension
+rounds up to the next 3-beat bar boundary from that region's own bar
+grid, regardless of what signature is active elsewhere on the timeline —
+there's no cross-signature special case, since the active signature at the
+relevant beat already answers the question the same way bar-line rendering
+does everywhere else.
 
 ---
 
@@ -84,7 +96,7 @@ specific swing feel). Rather than invent a new surface, extend the one
 already specified:
 
 - **Touch**: the long-press bottom sheet
-  ([piano-roll.md](./piano-roll.md#note-interactions--touch-draw-grid-mode))
+  ([piano-roll.md](./piano-roll.md#note-grid--main-scrollable-canvas))
   generalizes from "adjust velocity, duplicate, delete" to a small inspector
   with numeric fields for pitch, start, duration, and velocity, plus
   duplicate/delete.

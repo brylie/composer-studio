@@ -77,12 +77,16 @@ Every component a spec in this directory introduces gets a story per
 | NoteGrid | empty, populated, selection states (single/multi/marquee-in-progress), scale-highlight segment boundaries |
 | PianoKeys | default range, mid-playback key-highlight |
 | EventTrackLane | one per track type it's parameterized for (scale/chord/labels/arranger) |
-| Sound drawer | fixed-column (desktop), slide-over (mobile) |
+| Sound drawer | bottom sheet (mobile), side drawer (tablet/desktop) — per [overlay-shells.md](./overlay-shells.md#shell-contract) |
 
-`@storybook/addon-a11y` runs against every story, and violations block merge
-— this is the concrete enforcement mechanism
-[accessibility.md](./accessibility.md#process) already named but left
-unspecified; this document is where it becomes an actual gate.
+`@storybook/addon-a11y` runs against every story, and violations are meant
+to block merge once this is actually wired up — the same "not yet" as
+[Status](#status) above applies here too, not just to the 80% Vitest
+threshold. This document specifies what
+[accessibility.md](./accessibility.md#process) refers to only in general
+terms ("an a11y pass... before merging"): the concrete mechanism (this
+addon, against every Storybook story) that a *future* CI gate would enforce,
+once real components exist for it to run against.
 
 ---
 

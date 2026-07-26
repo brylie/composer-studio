@@ -25,7 +25,7 @@ sequenced around what that actually requires versus what it doesn't.
 | [transformations.md](./transformations.md) | High — this is the product | Medium | selection.md, command-history.md, tonal.js | ribbon.md, command-palette.md |
 | [ribbon.md](./ribbon.md) | High — how any of this gets used | Medium (mostly responsive UI work) | transformations.md's `CommandDescriptor` *shape* (not every command implemented) | command-palette.md |
 | [persistence.md](./persistence.md) | High — data loss risk once real use starts | Medium | Just the current document shape, whatever it is | Nothing else blocks on it |
-| [libraries.md](./libraries.md) — Tone.js | Medium — audio quality, not core logic | Medium-High (rewrites working `audio.ts`) | Nothing new | Sampled piano, effects |
+| [libraries.md](./libraries.md) — Tone.js | Medium — audio quality, not core logic | Medium-High (rewrites working `audio.ts`) | Nothing new | Effects; sampled instruments as a later addition, not part of this phase |
 | [timeline.md](./timeline.md) — event-track infra | Medium | Medium | Nothing new | tracks.md (scale/chord/labels) |
 | [tracks.md](./tracks.md) — scale track | Medium — nice, not required for the priority use case | Medium-High (the per-segment highlighting is the trickiest UI spec'd so far) | timeline.md | Scale-aware transforms (mode-shift, reharmonization), `generate-chords` `source: 'chord-track'` |
 | [tracks.md](./tracks.md) — chord track | Medium | Medium | scale track | `generate-chords` upgrade path (see below) |
@@ -65,7 +65,7 @@ hardcoding one-off colors instead of referencing named tokens.
 [selection.md](./selection.md), [command-history.md](./command-history.md),
 [editing-model.md](./editing-model.md), [state-ownership.md](./state-ownership.md).
 
-Low complexity, no new external dependencies, and all three specs are hard
+Low complexity, no new external dependencies, and all four specs are hard
 blockers for every transform command's `isApplicable()`/`run()` and undo
 behavior. This is mechanical work extending `store.svelte.ts` — the
 `SvelteSet` migration, the `'draw'`/`'select'` mode matrix, marquee
@@ -116,7 +116,7 @@ document shape currently is" — `schemaVersion` + migrations exist precisely
 so this doesn't have to wait for the schema to stop changing. Can start as
 early as Phase 1 in practice (see Parallelization).
 
-### Phase 5 — Sampled piano + Tone.js
+### Phase 5 — Tone.js migration (`PolySynth` piano)
 
 [libraries.md](./libraries.md) (Tone.js), rewriting [audio-engine.md](./audio-engine.md).
 
@@ -125,7 +125,10 @@ engine is underneath. Positioned here because it's a genuine rewrite of
 already-working `audio.ts`, not an addition, so it's worth doing once (after
 the Sound drawer's shape is stable from Phase 3) rather than touching
 `audio.ts` twice. This is also the most isolated, most parallelizable chunk
-of work in the whole roadmap — see below.
+of work in the whole roadmap — see below. Ships with the `Tone.PolySynth`
+default piano from [libraries.md](./libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth),
+not sampled instruments — those are real future work, deliberately kept off
+this roadmap until the baseline UX above it is proven out.
 
 ### Phase 6 — Timeline infrastructure + Scale track
 
@@ -210,7 +213,7 @@ interface to develop concurrently rather than sequentially:
 - **Phase 4 (persistence) ‖ almost anything** — its only dependency is "the
   document shape so far," and it doesn't gate any other phase. Good
   standalone track for whoever isn't on the critical path at any given time.
-- **Phase 5 (Tone.js/sampled piano) ‖ Phases 2–4** — fully isolated from the
+- **Phase 5 (Tone.js/`PolySynth` piano) ‖ Phases 2–4** — fully isolated from the
   selection/history/transform/persistence work; touches only `audio.ts` and
   the Sound drawer.
 

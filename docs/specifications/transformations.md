@@ -16,11 +16,24 @@ undoable.
 ## Command descriptor
 
 ```typescript
+interface ParamFieldBase {
+	key: string;
+	label: string;
+	// Omitted = always shown. Present = the drawer re-evaluates this against
+	// the current in-progress values on every change, hiding the field when
+	// it returns false — e.g. `invert`'s customPivot only makes sense once
+	// `pivot === 'custom'` is chosen.
+	showIf?: (values: Record<string, unknown>) => boolean;
+}
+
 type ParamField =
-	| { key: string; type: 'number'; label: string; min?: number; max?: number; step?: number; default: number }
-	| { key: string; type: 'range'; label: string; min: number; max: number; step?: number; default: number }
-	| { key: string; type: 'select'; label: string; options: { value: string; label: string }[]; default: string }
-	| { key: string; type: 'boolean'; label: string; default: boolean };
+	| (ParamFieldBase & { type: 'number'; min?: number; max?: number; step?: number; default: number })
+	| (ParamFieldBase & { type: 'range'; min: number; max: number; step?: number; default: number })
+	| (ParamFieldBase & { type: 'select'; options: { value: string; label: string }[]; default: string })
+	| (ParamFieldBase & { type: 'boolean'; default: boolean })
+	// A paired min/max value, e.g. generate-chords's octaveRange — distinct
+	// from 'range' above, which is one continuous value on a single slider.
+	| (ParamFieldBase & { type: 'number-range'; min: number; max: number; step?: number; default: { min: number; max: number } });
 
 interface CommandDescriptor<TParams extends Record<string, unknown> = Record<string, never>> {
 	id: string; // stable, kebab-case — e.g. "transpose"
@@ -31,10 +44,46 @@ interface CommandDescriptor<TParams extends Record<string, unknown> = Record<str
 	keywords?: string[]; // extra terms for command-palette search
 	shortcut?: string;
 	params?: ParamField[]; // omitted = one-click command, no drawer
-	isApplicable(ctx: SelectionContext): boolean;
-	run(ctx: SelectionContext, params: TParams): { notes: Note[]; label: string };
+	isApplicable(ctx: CommandContext): boolean;
+	run(ctx: CommandContext, params: TParams): { notes: Note[]; label: string };
 }
 ```
+
+`ParamFieldBase.showIf` and the `'number-range'` variant both exist because
+the catalog below already needs them, not speculatively: `invert`'s
+conditional `customPivot` needs `showIf`, and `generate-chords`'s
+`octaveRange: { min, max }` needs `'number-range'` — a command's declared
+`params: ParamField[]` couldn't otherwise represent either one, which would
+have quietly broken the "catalog drives an auto-generated drawer" promise
+for exactly the two commands most central to the priority use case.
+
+### `CommandContext`: `SelectionContext` plus what generators need
+
+Most commands only ever read the selection, but not all of them — the
+catalog below already assumes more than [`SelectionContext`](./selection.md#selectioncontext--what-transformations-actually-read)
+provides: the Euclidean rhythm generator writes at "the playhead/insertion
+beat, not the selection" (see Applicability below), and `generate-chords`'s
+`source: 'chord-track'` mode reads the chord track directly. Since `run()`
+must stay pure — per [architecture.md](./architecture.md#four-layers-named-the-svelte-idiomatic-way),
+it can't reach into Application-state singletons (`store`, the chord track)
+on its own — anything a command needs has to arrive through its context
+parameter, not be fetched inside `run()`. `CommandContext` extends
+`SelectionContext` with exactly the additional fields the current catalog
+needs, so existing references like `ctx.count` and `ctx.activeScales`
+continue to work unchanged:
+
+```typescript
+interface CommandContext extends SelectionContext {
+	allNotes: Note[]; // the whole document's notes, not just the selection — see run()'s return contract below
+	playhead: number; // current playhead beat — where a selection-free generator (Euclidean rhythm, ostinato) inserts
+	chordTrack: ChordEvent[]; // full track; generate-chords (source: 'chord-track') resolves its own target range from this plus `playhead`/`beatRange`
+}
+```
+
+This is computed alongside `selectionContext` in the same `$derived.by`
+scope (per [selection.md](./selection.md#selectioncontext--what-transformations-actually-read)),
+just widened by two more reads from existing Application-state — it isn't a
+second, separately-maintained derivation.
 
 - `params` is what auto-generates the parameter drawer described in
   [ribbon.md](./ribbon.md#parameter-drawer) — a command author declares fields
@@ -46,10 +95,19 @@ interface CommandDescriptor<TParams extends Record<string, unknown> = Record<str
   virtual keyboard. `'range'` fields (continuous amounts, e.g. `jitter`'s
   time/pitch/velocity amounts) stay sliders on every device. This is a
   rendering choice per field `type`, not a new schema field.
-- `run()` returns the **replacement note set** (destructive, per
-  [command-history.md](./command-history.md)) plus a human-readable `label`
-  used for the undo-stack entry. Every note in that set must satisfy the
-  invariants in [editing-model.md](./editing-model.md#invariants-every-mutation-must-uphold)
+- `run()`'s returned `notes` is the **complete replacement for the whole
+  document's `Note[]`** — not just the notes a command touched — matching
+  [command-history.md](./command-history.md#generalising-beyond-note)'s
+  whole-document-snapshot philosophy: applying a result is always a single
+  `store.notes = result.notes` assignment, with no per-command "how do I
+  splice this back in" logic. In practice a command builds this from
+  `ctx.allNotes`: a selection-transform (`transpose`, `invert`, ...) returns
+  `[...ctx.allNotes.filter((n) => !selectedIds.has(n.id)), ...transformed]`;
+  a pure-insertion generator (`generate-chords`, `arpeggiate`) returns
+  `[...ctx.allNotes, ...newNotes]` unchanged plus its additions — see
+  `generate-chords`'s own section below for the concrete case. Every note in
+  the returned set must satisfy the invariants in
+  [editing-model.md](./editing-model.md#invariants-every-mutation-must-uphold)
   — `transpose` and other pitch-shifting commands are responsible for
   clamping to `[MIN_MIDI, MAX_MIDI]` themselves; nothing does it for them.
 - `isApplicable()` is the enablement predicate — see below.
@@ -74,11 +132,22 @@ their own files (one file per command or small family of commands) keeps the
 registry itself a thin index — the natural seam for future external
 contributions.
 
+`category` includes `'view'` and `'transport'` even though no `viewCommands`/
+`transportCommands` array exists yet — those categories are intentionally
+unpopulated for now. Play/Stop, snap, and the velocity-lane toggle are still
+hardcoded Quick Access Bar/Toolbar chrome per
+[ribbon.md](./ribbon.md#quick-access-bar-stays-separate), not registry
+commands, until [command-palette.md](./command-palette.md#non-transform-commands)'s
+deferred milestone gives them a reason to become one (so they're invocable
+from the palette too). When that happens, the new array joins the spread
+above the same way `exportCommands` already did — the registry doesn't need
+to anticipate them before there's a command to put in them.
+
 ---
 
 ## Applicability
 
-Each command's `isApplicable(ctx: SelectionContext)` encodes its own minimum
+Each command's `isApplicable(ctx: CommandContext)` encodes its own minimum
 requirements — there's no shared "selection is non-empty" gate imposed
 centrally, because some generators (Euclidean rhythm, ostinato) don't need a
 selection at all, they need an insertion point. Examples:
@@ -90,7 +159,7 @@ selection at all, they need an insertion point. Examples:
 | Permutation  | `ctx.count >= 2`                                     |
 | Fragmentation| `ctx.count >= 2`                                     |
 | Re-harmonization | `ctx.count >= 1 && ctx.activeScales.length === 1` |
-| Euclidean rhythm generator | always applicable (writes to the playhead/insertion beat, not the selection) |
+| Euclidean rhythm generator | always applicable (writes at `ctx.playhead`, not the selection) |
 
 When a command is disabled, both the ribbon button and the palette row stay
 visible but greyed out with a reason (e.g. "Select at least 2 notes") rather
@@ -140,11 +209,16 @@ This is the command behind "generate chords with voice leading in a
 particular octave while I write melody on the same timeline": it **writes new
 notes** into the shared `Note[]` collection — it doesn't touch the melody
 notes at all, and the melody isn't required to be selected while it runs.
-Two source modes:
+Concretely, per `run()`'s whole-document contract above, this means
+`{ notes: [...ctx.allNotes, ...voicedChordNotes], label: 'Generate chords' }`
+— every existing note, melody or otherwise, is carried through unchanged,
+and the only additions are the newly voiced chord notes. Two source modes:
 
 - `source: 'chord-track'` — reads the active `ChordEvent` at each beat in the
-  target range from the [chord track](./tracks.md#chord-track-placeholder),
-  takes its `pitchClasses` (not the `quality` label — see
+  target range from `ctx.chordTrack` (see `CommandContext` above), the
+  [chord track](./tracks.md#chord-track-placeholder)'s full contents, resolved
+  via [timeline.md](./timeline.md#resolving-the-active-value-at-beat-x)'s
+  `activeEventAt`, takes its `pitchClasses` (not the `quality` label — see
   [tracks.md](./tracks.md#chordevent-carries-a-pitch-class-set-not-just-a-label)),
   and voices those pitch classes within `octaveRange`, smoothing voice
   movement between consecutive chords per `voicingStrategy`.
@@ -179,13 +253,21 @@ without special-casing.
 ## Execution flow
 
 1. **One-click command** (no `params`): clicking the ribbon button or palette
-   row calls `history.record(label, snapshot)` then `command.run(ctx, {})`
-   immediately, applying the result.
+   row calls `command.run(ctx, {})` immediately. `run()` is pure — per
+   [architecture.md](./architecture.md#four-layers-named-the-svelte-idiomatic-way),
+   it only computes a result, it doesn't touch `$state` — so calling it
+   commits nothing by itself. Only on success does the caller
+   `history.record(result.label, () => currentSnapshot())` (capturing the
+   *pre-mutation* document, per [command-history.md](./command-history.md#api)),
+   then apply `result.notes` as the actual mutation. A thrown `run()` skips
+   both steps entirely: no history entry, no state change — there's no
+   window where a history entry exists for a mutation that never happened,
+   or vice versa.
 2. **Parameterized command**: clicking opens the parameter drawer
    ([ribbon.md](./ribbon.md#parameter-drawer)) with `$state` bound to each
-   field's `default`. "Apply" performs the same record-then-run as above using
-   the drawer's current values; "Cancel" discards the drawer state with no
-   history entry.
+   field's `default`. "Apply" performs the same run-then-record-then-apply
+   sequence as above using the drawer's current values; "Cancel" discards the
+   drawer state with no history entry and no `run()` call at all.
 
 ### Live preview — left open
 

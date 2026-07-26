@@ -39,13 +39,28 @@ between consecutive scale events, not globally:
 
 ```typescript
 // for the currently visible beat range [viewStart, viewEnd):
-const segments = scaleEventsOverlapping(scaleTrack, viewStart, viewEnd)
-	.map((event, i, all) => ({
-		startBeat: event.beat,
-		endBeat: all[i + 1]?.beat ?? viewEnd,
-		scaleDegrees: pitchClassesFor(event.root, event.mode) // Set<number>, 0–11
-	}));
+const carryIn = activeEventAt(scaleTrack, viewStart); // per timeline.md — the scale
+// already active when the viewport starts, even if it was placed well before viewStart
+const withinView = scaleEventsOverlapping(scaleTrack, viewStart, viewEnd)
+	.filter((event) => event.id !== carryIn?.id); // avoid double-counting if it's also the first in-view event
+
+const events = carryIn ? [carryIn, ...withinView] : withinView;
+
+const segments = events.map((event, i, all) => ({
+	startBeat: Math.max(event.beat, viewStart), // clamp — carryIn's own beat may be long before viewStart
+	endBeat: Math.min(all[i + 1]?.beat ?? viewEnd, viewEnd),
+	scaleDegrees: pitchClassesFor(event.root, event.mode) // Set<number>, 0–11
+}));
 ```
+
+Without the carried-in event, a viewport scrolled to a range containing no
+`ScaleEvent` at all (common — most scrolling doesn't land exactly on a scale
+change) would compute zero segments and silently drop the highlight for a
+scale that's still very much active, just placed earlier. Every segment's
+bounds are clamped to `[viewStart, viewEnd)` regardless of where the
+underlying event actually sits on the timeline — the highlight band should
+never extend into invisible territory the segment computation didn't ask
+about.
 
 The note grid renders each segment as its own highlighted-row band (e.g. a
 subtle background tint or outline on in-scale rows, per the outline idea) —

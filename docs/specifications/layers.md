@@ -75,7 +75,7 @@ interface Note {
 ([piano-roll.md](./piano-roll.md#editorstate-storesveltets)) to a field on
 each `Layer` — this is the multi-instrument part of the feature. The Sound
 drawer, once layers exist, edits the **active layer's** instrument rather
-than one document-wide instrument (see [libraries.md](./libraries.md#sampled-piano-as-the-primary-instrument)).
+than one document-wide instrument (see [libraries.md](./libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth)).
 
 ### Active layer
 
@@ -210,8 +210,9 @@ of "one instrument voice," not a redesign.
   worth adding if hide-for-editing and hide-for-listening turn out to be
   different needs in practice.
 - **Per-layer default instrument** when a new layer is created — cloning
-  the previous layer's settings, or always defaulting to the sampled piano,
-  is a small UX decision left for whenever layer creation is actually built.
+  the previous layer's settings, or always defaulting to the `PolySynth`
+  piano preset, is a small UX decision left for whenever layer creation is
+  actually built.
 - **Locked-layer note inspector access** — is a locked note fully
   unreachable (can't even open the [note inspector](./editing-model.md#note-inspector-precise-numeric-entry)
   to look at its exact values), or just unreachable for *mutation*? Leaning

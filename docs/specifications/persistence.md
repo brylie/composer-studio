@@ -46,7 +46,7 @@ interface ProjectFile {
 	chordTrack: ChordEvent[];
 	labelTrack: LabelEvent[];
 	arrangerSections: ArrangerSection[];
-	synthSettings: SynthSettings; // or InstrumentSettings, once libraries.md's sampled-piano work lands
+	synthSettings: SynthSettings; // or InstrumentSettings, once libraries.md's Tone.js migration lands
 	loopStart: number;
 	loopEnd: number;
 	loopEnabled: boolean;
@@ -83,14 +83,51 @@ const migrations: Record<number, (doc: unknown) => unknown> = {
 	// 1: (doc) => ({ ...doc, labelTrack: [] }), // example: field added in schema v2
 };
 
+function hasSchemaVersion(doc: unknown): doc is { schemaVersion: number } {
+	return (
+		typeof doc === 'object' &&
+		doc !== null &&
+		typeof (doc as { schemaVersion?: unknown }).schemaVersion === 'number'
+	);
+}
+
 function loadProjectFile(raw: unknown): ProjectFile {
-	let doc = raw as { schemaVersion: number };
-	while (doc.schemaVersion < CURRENT_SCHEMA_VERSION) {
-		doc = migrations[doc.schemaVersion](doc);
+	if (!hasSchemaVersion(raw)) {
+		throw new ProjectFileError('Not a recognizable project file');
+	}
+	if (raw.schemaVersion > CURRENT_SCHEMA_VERSION) {
+		// Saved by a newer version of the app than this one supports — don't
+		// guess at how to read it.
+		throw new ProjectFileError(
+			`This file needs a newer version of Composer Studio (schema v${raw.schemaVersion})`
+		);
+	}
+
+	let doc: unknown = raw;
+	while (hasSchemaVersion(doc) && doc.schemaVersion < CURRENT_SCHEMA_VERSION) {
+		const migrate = migrations[doc.schemaVersion];
+		if (!migrate) {
+			// A gap in the migration chain is a bug in this app, not a bad file —
+			// fail loudly rather than silently returning a half-migrated document.
+			throw new ProjectFileError(`No migration registered for schema v${doc.schemaVersion}`);
+		}
+		doc = migrate(doc);
+	}
+
+	if (!hasSchemaVersion(doc) || doc.schemaVersion !== CURRENT_SCHEMA_VERSION) {
+		throw new ProjectFileError('Migration produced an invalid document');
 	}
 	return doc as ProjectFile;
 }
 ```
+
+Three distinct failure modes, each rejected explicitly rather than left to
+crash on a bad property access or silently produce a half-valid document:
+a file that isn't shaped like a `ProjectFile` at all, a `schemaVersion`
+newer than this app version understands, and a missing migration step for
+some version in between. [Import Project](#export--import-the-sharing-mechanism)
+surfaces `ProjectFileError` as a user-facing message rather than letting it
+propagate as an unhandled exception.
 
 Each migration only needs to bridge one version step; they compose.
 
@@ -125,7 +162,10 @@ An outer view (the Top Bar's "Back" destination) lists `ProjectSummary[]`
 with New / Open / Duplicate / Delete. The library's visual design is out of
 scope here, same as other UI placeholders in this directory — only the data
 model and the fact that Back returns here are being nailed down now, because
-`ribbon.md` already presupposes it exists.
+`ribbon.md` already presupposes it exists. New and Open both replace the
+in-memory document, so both go through the
+[flush-before-replace step](#flush-before-any-document-replacing-action)
+below, same as Import.
 
 ### Autosave trigger
 
@@ -134,6 +174,22 @@ autosave after each [`CommandHistory.record()`](./command-history.md) call —
 i.e. once per completed user gesture, the same boundary already used for
 undo steps. No separate "has this changed" tracking needed; if there's a new
 history entry, there's something to save.
+
+### Flush before any document-replacing action
+
+Because autosave is debounced, there's a window — between the last
+`CommandHistory.record()` and the debounce timer firing — where the most
+recent edit exists only in memory. Any action that **replaces the in-memory
+document** (Import Project below, opening a different project from the
+library, starting New) must cancel the pending debounce timer and write
+immediately, awaiting that write before proceeding. Skipping this means the
+"are there unsaved changes?" check driving the confirmation prompt can read
+stale state and answer "no" while a real edit is about to be silently
+discarded — the confirmation exists specifically to prevent that, so it has
+to run against current state, not a debounce window's worth of stale state.
+
+Every document-replacing action goes through this same flush-then-check
+step rather than each one growing its own version of the same guard.
 
 ---
 
@@ -144,8 +200,9 @@ history entry, there's something to save.
   is a convention for recognizability, not a registered file association).
 - **Import Project** — file picker, validates against `ProjectFile` (running
   it through the migration chain above if it's an older `schemaVersion`),
-  then **replaces the current document** after a confirmation prompt if there
-  are unsaved autosaved changes — this is a destructive action on the
+  [flushes the pending autosave](#flush-before-any-document-replacing-action)
+  first, then **replaces the current document** after a confirmation prompt
+  if there are unsaved changes — this is a destructive action on the
   in-progress document and follows the same confirm-before-destructive
   pattern already used for Clear All ([piano-roll.md](./piano-roll.md#toolbar)).
 - Both are registry commands (`export-project`, `import-project`), same as

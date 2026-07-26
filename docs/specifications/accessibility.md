@@ -39,9 +39,12 @@ just checked manually) rather than an unused add-on.
   stated design) satisfies this, but verify contrast ratios in both light and
   dark themes once implemented.
 
-## Parameter drawer / bottom sheet / command palette
+## Focus management
 
-- All three are dialog-like overlays and must trap focus while open and
+Applies to every dialog-like overlay: the ribbon's parameter drawer, the
+Sound drawer, the note inspector, and the (later) command palette.
+
+- All are dialog-like overlays and must trap focus while open and
   restore focus to the invoking control on close — the same pattern
   SvelteKit's own focus-after-navigation handling models, just triggered by
   an overlay open/close instead of a route change.
@@ -76,7 +79,11 @@ just checked manually) rather than an unused add-on.
 ## Process
 
 - New components get an a11y pass in Storybook (via the a11y addon) before
-  merging, not after.
+  merging, not after — the target once
+  [testing-strategy.md](./testing-strategy.md#storybook-component-coverage-accessibility-as-a-gate)'s
+  CI gate is actually wired up (explicitly **not** the case yet, per that
+  document's own Status section); until then this is a manual practice to
+  follow, not an enforced one.
 - When a spec above makes an accessibility trade-off (e.g. "full keyboard
   parity is aspirational"), that trade-off is recorded here, not silently
   assumed.

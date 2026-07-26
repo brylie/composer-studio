@@ -96,8 +96,8 @@ Several specs already assumed this layering without naming it:
 - [libraries.md](./libraries.md)'s "wrap it, don't spray it" **is** the
   Domain/external-library boundary defined above.
 - [transformations.md](./transformations.md)'s `CommandDescriptor.run()` —
-  a pure function of `(SelectionContext, params) → Note[]` — is already
-  Domain-shaped; it doesn't touch `$state` or the DOM.
+  a pure function of `(CommandContext, params) → { notes, label }` — is
+  already Domain-shaped; it doesn't touch `$state` or the DOM.
 - [command-history.md](./command-history.md)'s `DocumentSnapshot` and
   `CommandHistory` class belong in Application state — they hold `$state`
   and orchestrate calls into Domain functions.

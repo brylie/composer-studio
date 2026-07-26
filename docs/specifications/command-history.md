@@ -75,27 +75,40 @@ class CommandHistory {
 	canRedo = $derived(this.#redoStack.length > 0);
 
 	// call BEFORE mutating, with a human-readable label for the action about to happen
-	record(label: string, snapshot: () => DocumentSnapshot) {
-		this.#undoStack.push(snapshot());
+	record(label: string, snapshot: () => Omit<DocumentSnapshot, 'label'>) {
+		// label comes from the parameter, not from whatever (if anything) the
+		// snapshot callback's own return value happens to carry — there's
+		// exactly one place a stored entry's label is decided.
+		// structuredClone so a later live-state mutation can't reach back into
+		// an already-recorded entry through a shared array/object reference.
+		this.#undoStack.push(structuredClone({ ...snapshot(), label }));
 		this.#redoStack.length = 0;
 		if (this.#undoStack.length > this.#maxDepth) this.#undoStack.shift();
 	}
 
-	undo(current: () => DocumentSnapshot): DocumentSnapshot | undefined {
+	undo(current: () => Omit<DocumentSnapshot, 'label'>): DocumentSnapshot | undefined {
 		const entry = this.#undoStack.pop();
 		if (!entry) return;
-		this.#redoStack.push(current());
+		// Redo re-applies the same named action, so the entry pushed here
+		// carries the popped entry's own label, not a new/different one.
+		this.#redoStack.push(structuredClone({ ...current(), label: entry.label }));
 		return entry;
 	}
 
-	redo(current: () => DocumentSnapshot): DocumentSnapshot | undefined {
+	redo(current: () => Omit<DocumentSnapshot, 'label'>): DocumentSnapshot | undefined {
 		const entry = this.#redoStack.pop();
 		if (!entry) return;
-		this.#undoStack.push(current());
+		this.#undoStack.push(structuredClone({ ...current(), label: entry.label }));
 		return entry;
 	}
 }
 ```
+
+`snapshot()`/`current()` only need to capture the data fields (`notes`, and
+scale/chord/arranger events once those tracks land) — the label is always
+supplied by whichever method is doing the recording, never embedded in the
+callback's own return value, so there's no second, competing source of
+truth for it.
 
 This keeps `CommandHistory` ignorant of *what* a document is — it just stores
 and returns snapshots. The editor store owns applying a returned snapshot back

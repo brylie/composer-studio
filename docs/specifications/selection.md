@@ -29,6 +29,16 @@ let selectedNoteIds = new SvelteSet<string>();
 
 This is a drop-in improvement to the existing store, not a new concept — worth
 doing as part of implementing this spec rather than carrying the array forward.
+It isn't a one-line change, though: every method that currently reassigns
+`selectedNoteIds` as a new array — `removeNote`, `undo`, `redo`, `selectNote`,
+`selectNotes`, `selectAll`, `deselectAll`, and `deleteSelected` in
+`store.svelte.ts` — needs its `.filter()`/spread logic rewritten to
+`.add()`/`.delete()`/`.clear()` calls on the set, since those are mutations,
+not reassignments. `NoteGrid.svelte` reads `store.selectedNoteIds` directly
+in a few places (`.length`, `.includes(noteId)`) that become `.size`/`.has()`
+on a `SvelteSet` — there's no array-shaped consumer left once this migrates,
+so no adapter layer is needed to bridge the two; every touch point moves to
+`Set` semantics together, in the same change.
 
 ### Selection is ephemeral — not part of undo/redo
 
@@ -67,7 +77,7 @@ interface SelectionContext {
 	count: number;
 	pitchRange: { min: number; max: number } | null;
 	beatRange: { start: number; end: number } | null;
-	isContiguous: boolean; // no gaps between consecutive note end/start
+	isContiguous: boolean; // the union of note intervals has no gaps — see below, NOT a naive pairwise check
 	activeScales: ActiveScaleSegment[]; // see below
 	activeLayers: Layer[]; // distinct layers referenced by `notes` — see layers.md
 }
@@ -81,6 +91,38 @@ const selectionContext = $derived.by((): SelectionContext => {
 	// ...derive count / pitchRange / beatRange / isContiguous / activeScales
 });
 ```
+
+#### `isContiguous`: union coverage, not consecutive-pair comparison
+
+A naive "does `notes[i].endBeat === notes[i + 1].startBeat`?" check breaks as
+soon as one selected note fully covers a shorter one that sorts right after
+it — e.g. a 10-beat-long note from beat 0, a short 2-beat note nested inside
+it starting at beat 2, then a third note starting exactly at beat 10.
+Sorted by `startBeat`, the pairwise check compares the first note's `endBeat`
+(10) against the *second* note's `startBeat` (2) and reports a gap, even
+though the three notes' combined time coverage is one unbroken span from 0
+to past the third note's start. The correct definition evaluates the union
+of intervals instead — track the greatest `endBeat` seen so far while
+walking the sorted notes, and only count a gap when the next note's
+`startBeat` exceeds that running maximum, not merely its immediate
+predecessor's `endBeat`:
+
+```typescript
+function isContiguous(notes: Note[]): boolean {
+	let coveredUntil = -Infinity;
+	for (const note of notes) {
+		if (note.startBeat > coveredUntil) {
+			if (coveredUntil !== -Infinity) return false; // a real gap, not just the first note
+		}
+		coveredUntil = Math.max(coveredUntil, note.startBeat + note.durationBeats);
+	}
+	return true;
+}
+```
+
+Overlapping and touching notes both stay contiguous under this definition,
+including the covering-note case above — only a genuine gap in the union
+(no selected note reaches up to where the next one starts) counts.
 
 Each transformation declares its own minimum-selection rule against this shape
 (e.g. retrograde needs `count >= 1`, a chord-aware re-harmonization might need
@@ -206,7 +248,7 @@ switch; touch requires the switch since it has no modifiers.
 | --------------------------- | ---------------------------------------- | --------------------------------------------------- |
 | Tap/click empty space        | Create note                             | Start a lasso (marquee) rectangle                   |
 | Tap/click existing note      | Delete note (touch) / select (desktop, see note below) | Toggle that note in/out of selection |
-| Drag from empty space        | Pans the grid (touch) / marquee-selects (desktop, no modifier needed) | Lasso select |
+| Drag from empty space        | Pans the grid (touch) / draws a note, dragging sets its initial duration (desktop, unmodified — per [piano-roll.md](./piano-roll.md#note-grid--main-scrollable-canvas)); ctrl/shift+drag marquee-selects instead, same modifier-layered-on-`'draw'` pattern as click | Lasso select |
 | Drag an existing note        | Move note                               | Move the *entire current selection* (if the dragged note is already selected) or replace-and-move (if not) |
 
 Desktop's "tap existing note" behavior differs from touch by necessity: a

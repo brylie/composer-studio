@@ -57,7 +57,7 @@ const ribbonTabs: RibbonTab[] = [
 		groups: [
 			{ id: 'pitch', labelKey: 'ribbon_group_pitch', commandIds: ['transpose', 'invert', 'mode-shift'] },
 			{ id: 'time', labelKey: 'ribbon_group_time', commandIds: ['retrograde', 'augmentation', 'diminution', 'metric-modulation'] },
-			{ id: 'structure', labelKey: 'ribbon_group_structure', commandIds: ['fragmentation', 'truncation', 'expansion', 'permutation'] },
+			{ id: 'structure', labelKey: 'ribbon_group_structure', commandIds: ['fragmentation', 'truncation', 'expansion', 'permutation', 'duplicate-selection'] },
 			{ id: 'harmony', labelKey: 'ribbon_group_harmony', commandIds: ['reharmonization', 'voice-leading-adapt'] },
 			{ id: 'humanize', labelKey: 'ribbon_group_humanize', commandIds: ['jitter'] }
 		]
@@ -67,13 +67,20 @@ const ribbonTabs: RibbonTab[] = [
 		labelKey: 'ribbon_tab_generate',
 		groups: [
 			{ id: 'patterns', labelKey: 'ribbon_group_patterns', commandIds: ['arpeggiate', 'euclidean-rhythm'] },
-			{ id: 'motif', labelKey: 'ribbon_group_motif', commandIds: ['motif-generate', 'ostinato-generate'] }
+			{ id: 'motif', labelKey: 'ribbon_group_motif', commandIds: ['motif-generate', 'ostinato-generate'] },
+			{ id: 'harmony', labelKey: 'ribbon_group_generate_harmony', commandIds: ['generate-chords'] }
 		]
 	},
 	{
 		id: 'export',
 		labelKey: 'ribbon_tab_export',
-		groups: [{ id: 'file', labelKey: 'ribbon_group_file', commandIds: ['export-midi'] }]
+		groups: [
+			{
+				id: 'file',
+				labelKey: 'ribbon_group_file',
+				commandIds: ['export-midi', 'export-project', 'import-project']
+			}
+		]
 	}
 ];
 ```

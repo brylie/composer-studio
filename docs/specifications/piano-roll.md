@@ -77,12 +77,12 @@ interface SynthSettings {
   snapDenominator: 1 | 2 | 4 | 8 | 16;  // denominator of note value
   showVelocity: boolean;
   loopEnabled: boolean;
-  loopStart: number;        // beat, default 0 — draggable via ruler markers, see Ruler below
-  loopEnd: number;          // beat, default = totalBeats
+  loopStart: number;        // beat, default 0 — planned, not yet in store.svelte.ts, see Ruler below
+  loopEnd: number;          // beat, default = totalBeats — planned, not yet in store.svelte.ts
   totalBeats: number;       // project/timeline length in beats (default 64 = 16 bars)
   pixelsPerBeat: number;    // horizontal zoom (default 80)
   rowHeight: number;        // px per semitone row (default 24)
-  tempo: number;            // BPM (default 120)
+  tempo: number;            // BPM (default 122)
   synthSettings: SynthSettings;
   // Derived
   snapBeats: number;        // 4 / snapDenominator
@@ -192,19 +192,19 @@ grid; drag bars to set per-note velocity (planned).
 | Section    | Controls                                            |
 | ---------- | --------------------------------------------------- |
 | Preset     | Dropdown of named presets stored in component state |
-| Instrument | Dropdown: **Piano** (sampled, default) / Sine / Square / Sawtooth / Triangle — see [libraries.md](./libraries.md#sampled-piano-as-the-primary-instrument) |
+| Instrument | Dropdown: **Piano** (`Tone.PolySynth` preset, default) / Sine / Square / Sawtooth / Triangle — see [libraries.md](./libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth) |
 | Volume     | Range slider 0–100 %                                |
 | Tempo      | Range slider 40–240 BPM                             |
 | Envelope ▾ | Attack / Decay / Sustain / Release sliders          |
 | Filter ▾   | Enable toggle + Cutoff (Hz) + Resonance sliders     |
 | Effects ▾  | Reserved (reverb / delay — see [libraries.md](./libraries.md#tonejs--adopt-but-its-a-rewrite-not-just-an-addition)) |
 
-Layout is responsive, same fixed-column-vs-overlay split as the ribbon's
-[parameter drawer](./ribbon.md#parameter-drawer):
-
-- **Desktop**: fixed right column, 220px, always visible.
-- **Tablet/mobile**: collapsed by default, opened as a right-side slide-over
-  via a dedicated Sound-drawer button in the [top bar](./ribbon.md#top-bar).
+The Sound drawer is a consumer of [overlay-shells.md](./overlay-shells.md#shell-contract)'s
+shared shell, same as the ribbon's parameter drawer and the note inspector —
+it does not define its own responsive breakpoint or dimensions. Opened via
+the dedicated Sound-drawer button in the [top bar](./ribbon.md#top-bar) at
+every breakpoint: a mobile-width bottom sheet, or a right-aligned side
+drawer on tablet/desktop, per the shell's `isMobile` check.
 
 ### Default viewport zoom
 

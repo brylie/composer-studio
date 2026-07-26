@@ -85,51 +85,75 @@ works. Sequencing options:
 No default is asserted here — worth a quick decision before implementation
 starts, since it changes what the first few PRs touch.
 
-### Sampled piano as the primary instrument
+### MVP default instrument: `Tone.PolySynth` over `Tone.Synth`
 
-Per [README.md](./README.md#scope), realistic piano sound is the priority
-over the current oscillator-only synth — appropriate for a piano-composition
-tool where you're listening to judge the actual music, not a synth patch.
-`Tone.Sampler` maps a set of recorded piano notes across the keyboard,
-pitch-shifting between sample points:
+Revised from an earlier direction: realistic sampled piano sound was briefly
+the stated priority (see [Sampled instruments — deferred past MVP](#sampled-instruments--deferred-past-mvp)
+below for why that's no longer true right now). Introducing sample playback
+this early would also introduce sample licensing/attribution, hosting, and
+async-loading-failure concerns into the MVP timeline for a feature that
+doesn't block proving out the ribbon/transform/generate workflow this whole
+spec set is centered on — the actual priority use case (voice-led chord
+generation + melody variation on one timeline, per
+[README.md](./README.md#scope)) doesn't need a convincing piano *timbre*, it
+needs correct *notes*. A synth-based piano is enough to judge that, and adds
+zero new external dependencies beyond Tone.js itself:
 
 ```typescript
-const piano = new Tone.Sampler({
-	urls: { /* a handful of sampled notes across the range, e.g. every major third */ },
-	baseUrl: '/samples/piano/',
-	onload: () => { /* ready — see loading below */ }
-});
+const piano = new Tone.PolySynth(Tone.Synth, {
+	oscillator: { type: 'triangle' }, // closer to piano harmonic content than a sine
+	envelope: {
+		attack: 0.005,
+		decay: 0.1,
+		sustain: 0.3,
+		release: 1
+	}
+}).toDestination();
+
+piano.triggerAttackRelease(['C4', 'E4', 'G4'], '8n'); // chords: pass an array of notes
+piano.triggerAttackRelease('C5', '4n');
 ```
 
-- **Sample source**: a freely-licensed multi-velocity piano set (e.g. the
-  Salamander Grand Piano samples commonly bundled with Tone.js examples,
-  CC-BY) rather than recording anything in-house.
-- **Loading**: sample files are tens of MB uncompressed across a full velocity
-  range — too much to block on before the app is usable. Load asynchronously
-  after first interaction (matches the existing lazy `AudioContext` creation
-  in `audio.ts`), play back through the existing synth waveform as a fallback
-  until the sampler reports `onload`, and surface a lightweight loading
-  indicator in the Sound drawer rather than silently doing nothing on early
-  keypresses.
-- **Hosting**: bundled as static assets (`src/lib/assets` / `static/`) vs.
-  fetched from a CDN is a deployment decision, not a spec decision — either
-  works with `Tone.Sampler`'s `baseUrl`; revisit once a deployment target is
-  chosen.
-- **Instrument selector, not a replacement**: the Sound drawer's existing
-  Waveform dropdown becomes an **Instrument** selector — "Piano" (sampled,
-  default) alongside the existing Sine/Square/Sawtooth/Triangle oscillator
-  options, per [piano-roll.md](./piano-roll.md#synth-panel--responsive-sound-drawer).
-  Envelope/Filter controls remain meaningful for the oscillator voices; for
-  the sampled piano they're reduced-scope (release time still applies, attack
-  and filter largely don't since the sample carries its own timbre) rather
-  than removed outright.
+- **Polyphony is the reason this is a `PolySynth`, not a bare `Synth`**:
+  `Tone.PolySynth` manages voice allocation internally, so
+  `generate-chords` producing several simultaneous notes (or any ordinary
+  chord under the fingers) just works — `triggerAttackRelease` accepts an
+  array of notes directly. This was already the plan per the table above;
+  nothing about deferring sampling changes it.
+- **Instrument selector**: the Sound drawer's Waveform dropdown becomes an
+  **Instrument** selector, but for MVP its only entry is this "Piano"
+  `PolySynth` preset alongside the existing Sine/Square/Sawtooth/Triangle
+  raw-oscillator options, per
+  [piano-roll.md](./piano-roll.md#synth-panel--responsive-sound-drawer) —
+  no "sampled" entry yet. Envelope/Filter controls apply to it the same way
+  they already apply to the other oscillator-based options; there's no
+  reduced-scope carve-out to design since nothing here has its own
+  hardcoded timbre to protect.
 - **Per-layer, once layers exist**: this instrument selector is described
   above as document-wide because that's the current (and v1) scope. Once
   [layers.md](./layers.md) lands, each layer gets its own instrument
-  settings and its own `Tone.Sampler`/`Tone.PolySynth` instance — the Sound
-  drawer then edits whichever layer is currently active, not a single
-  global instrument. No change to the underlying Tone.js approach, just to
-  how many instances of it exist.
+  settings and its own `Tone.PolySynth` instance — the Sound drawer then
+  edits whichever layer is currently active, not a single global
+  instrument. No change to the underlying Tone.js approach, just to how
+  many instances of it exist.
+
+### Sampled instruments — deferred past MVP
+
+Real, freely-licensed multi-velocity piano samples (e.g. the Salamander
+Grand Piano set commonly bundled with Tone.js examples) via `Tone.Sampler`
+remain a reasonable **later** addition once the ribbon/transform/generate
+workflow is proven out — "more instruments, including sampled instruments,
+once the basic UX is fully realized." Deferring it avoids taking on, before
+that UX exists: sample licensing/attribution tracking, hosting (bundled vs.
+CDN) as a deployment decision, and asynchronous load-success/load-failure
+handling (a lightweight loading indicator, a permanent synth fallback if
+loading fails, and a manual retry affordance, since a multi-MB download
+failing isn't a transient error worth silently retrying). None of that
+design work is wasted by waiting — `Tone.Sampler` and `Tone.PolySynth`
+share the same `triggerAttackRelease` interface, so adding "Piano (sampled)"
+as a second Instrument-selector entry later doesn't require touching
+anything about how notes get triggered, only which instrument backs the
+selector's "Piano" option.
 
 ---
 
