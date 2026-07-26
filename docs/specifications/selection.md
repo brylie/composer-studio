@@ -69,6 +69,7 @@ interface SelectionContext {
 	beatRange: { start: number; end: number } | null;
 	isContiguous: boolean; // no gaps between consecutive note end/start
 	activeScales: ActiveScaleSegment[]; // see below
+	activeLayers: Layer[]; // distinct layers referenced by `notes` — see layers.md
 }
 ```
 
@@ -120,6 +121,27 @@ should decide for themselves how to treat a multi-segment selection (e.g.
 apply per-segment, or require `activeScales.length === 1` and report
 inapplicable otherwise) rather than this module picking a policy for them.
 
+#### `activeLayers`: selection spans layers freely, by design
+
+Unlike `activeScales`, this isn't fixing a bug in an earlier draft — it's a
+deliberate requirement. [layers.md](./layers.md) introduces instruments as
+layers over one shared `Note[]` collection specifically so a multi-voice
+selection (e.g. soprano + alto in a choral texture) can be selected,
+transposed, copied, and pasted as one gesture, the same as any other
+selection — a selection was never going to be restricted to one layer.
+`activeLayers` is simply the deduplicated set of layers referenced by
+`notes`, in panel/z-order, with no clamping or slicing needed (a note either
+belongs to a layer or it doesn't — no partial membership like a beat range
+crossing a scale boundary).
+
+Layer visibility and lock gate what can be selected **before** a note ever
+reaches this shape, not inside it: marquee-select and click only hit-test
+notes on visible, unlocked layers (see
+[layers.md](./layers.md#rendering-and-interaction-rules)), so `activeLayers`
+never ends up containing a locked or hidden layer as a byproduct of how the
+selection was made — this module doesn't need its own filtering rule for
+that.
+
 ---
 
 ## Selection modes
@@ -130,7 +152,7 @@ inapplicable otherwise) rather than this module picking a policy for them.
 | Ctrl/Cmd+click a note              | Toggle that note in/out of selection                            | Exists                |
 | Shift+click a note                 | Select the range between the anchor and the clicked note        | New                    |
 | Drag on empty grid space           | Marquee (bounding-box) select — rectangle intersect vs. note rects in beat/pitch space | New |
-| Ctrl/Cmd+A                          | Select all                                                     | Exists                |
+| Ctrl/Cmd+A                          | Select all — visible, unlocked layers only (see [layers.md](./layers.md)) | Exists |
 | Escape / click empty space         | Deselect all                                                   | Exists (click only)   |
 
 ### Marquee selection
@@ -205,15 +227,20 @@ cross-app paste isn't a goal here):
 
 ```typescript
 interface ClipboardContents {
-	notes: Note[]; // positions stored relative to the earliest selected startBeat
+	notes: Note[]; // positions stored relative to the earliest selected startBeat; layerId preserved as-is
 }
 ```
 
 - **Copy**: snapshots the currently selected notes into `ClipboardContents`,
-  normalizing `startBeat` so the earliest copied note is at `0`.
+  normalizing `startBeat` so the earliest copied note is at `0`. Each note's
+  `layerId` is copied verbatim — a multi-layer selection (e.g. soprano +
+  alto) stays split across the same layers in the clipboard.
 - **Paste**: inserts the clipboard's notes at the current playhead beat
   (`pastedNote.startBeat = clipboardNote.startBeat + currentBeat`), assigns
-  fresh ids, and **replaces the current selection with the newly pasted
+  fresh ids, keeps each note on its original `layerId` (falling back to the
+  active layer if that layer was deleted between copy and paste — see
+  [layers.md](./layers.md#clipboard-preserve-layer-membership-across-copypaste)),
+  and **replaces the current selection with the newly pasted
   notes** — this is deliberate, not incidental: it means paste-then-transform
   (paste a phrase, immediately hit Transpose or Retrograde on it) works
   without an extra selection step, which is exactly the "create variations on

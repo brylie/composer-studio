@@ -91,7 +91,7 @@ option open:
 | | Singleton `.svelte.ts` module | Root-provided context (this decision) |
 | --- | --- | --- |
 | Cost for the current single-instance scope | Zero | One provider component + a getter per consumer — small, one-time |
-| Multiple independent instances (orchestration, later) | Not possible without a rewrite | Nest a second provider — no rewrite of consumers |
+| Multiple independent instances (separate documents, tests) | Not possible without a rewrite | Nest a second provider — no rewrite of consumers |
 | SSR safety | Risk: shared module state can leak across requests | Safe — scoped per component tree/request |
 | Testability in isolation | Harder — state persists across test cases/stories unless manually reset | Easier — wrap a test/story in its own provider for a fresh instance |
 | Consistency with existing code | Matches `store.svelte.ts` exactly | New pattern, deliberately introduced once (this doc), not mixed ad hoc |
@@ -101,22 +101,28 @@ SSR-leak risk isn't an active problem — but it isn't the deciding factor
 either. The deciding factor is that paying the context-adoption cost once
 already buys the multi-instance and test-isolation benefits, so there's no
 reason to defer it behind a "trigger condition" that would just mean paying
-the same migration cost later, under more time pressure, once orchestration
-or flaky-test pain actually shows up.
+the same migration cost later, under more time pressure, once one of those
+needs actually shows up.
 
 ## What this replaces from the old deferred version
 
 The previous version of this document deferred the decision behind two
 trigger conditions — multiple simultaneous editor instances, and test/Storybook
-isolation pain — and said not to preemptively address either. Both are now
-addressed by construction rather than by waiting:
+isolation pain — with "multiple instances" originally imagined as the
+mechanism for multi-instrument orchestration (one editor instance per
+instrument/track). [layers.md](./layers.md) resolved that assumption away:
+orchestration turned out to need one document with instruments as layers,
+not multiple documents, so it was never actually going to be this
+mechanism's job. What nesting a second provider is still genuinely for:
 
-1. **Multiple independent editor instances** — supported by nesting a second
-   provider; no architectural change needed when orchestration work
-   eventually wants this.
+1. **Genuinely separate documents** — e.g. two unrelated compositions open
+   at once, if that's ever wanted — not per-instrument editing within one
+   composition, which stays on a single document/selection/undo-history per
+   [layers.md](./layers.md).
 2. **Test/Storybook isolation** — a test or story wraps its subject in its
    own `provideEditorState()` call, getting a fresh instance without manual
-   reset logic.
+   reset logic. This is the trigger condition that still actually matters
+   day-to-day.
 
 ## Migration cost, named honestly
 

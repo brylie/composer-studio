@@ -32,6 +32,7 @@ sequenced around what that actually requires versus what it doesn't.
 | [tracks.md](./tracks.md) — labels track | Low | Low | timeline.md | Nothing blocks on it |
 | [command-palette.md](./command-palette.md) | Low (already deferred) | Low once the registry exists | transformations.md | Nothing blocks on it |
 | [tracks.md](./tracks.md) — arranger track | Low for v1 (annotation-only) | Low for v1, high for content-carrying | timeline.md | Nothing blocks on it yet |
+| [layers.md](./layers.md) | Low for v1 (explicitly later-stage), high once multi-instrument orchestration is prioritized | Medium (`Note.layerId`, per-layer instrument/audio instance, layer panel UI, persistence migration) | editing-model.md (`Note` shape), selection.md (`activeLayers`) | Multi-instrument orchestration (choral/ensemble writing) without needing separate tracks or editor instances |
 | [testing-strategy.md](./testing-strategy.md), [accessibility.md](./accessibility.md), [performance.md](./performance.md) | Ongoing/reactive, not phase-gated — see below | — | — | — |
 
 The key finding: **`generate-chords` doesn't need the chord track.** It was
@@ -165,8 +166,21 @@ ripple) is cheap once Phase 6's lane machinery exists. The content-carrying
 upgrade — actually moving notes/events with a section — is gated on
 resolving the ripple-vs-free-placement question in
 [timeline.md](./timeline.md#ripple-semantics-open-design-question), which is
-real design work, not implementation work, and is also the closest thing on
-this roadmap to a first step toward orchestration.
+real design work, not implementation work.
+
+### Phase 10 — Instrument layers
+
+[layers.md](./layers.md).
+
+Multi-instrument orchestration (choral/ensemble writing), once it's
+actually prioritized: `Note.layerId`, the reorderable layer panel
+(visibility/lock, another [overlay-shells.md](./overlay-shells.md)
+consumer), per-layer instrument settings and audio instances, and the
+`ProjectFile` schema migration. Placed last not because it's low-value, but
+because nothing in the v1 single-instrument scope
+([README.md](./README.md#scope)) blocks on it, and `selection.md`'s
+`activeLayers` field costs nothing to have specified early even though its
+real payoff — multi-voice selection across layers — only lands here.
 
 ---
 

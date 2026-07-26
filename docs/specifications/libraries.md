@@ -123,6 +123,13 @@ const piano = new Tone.Sampler({
   the sampled piano they're reduced-scope (release time still applies, attack
   and filter largely don't since the sample carries its own timbre) rather
   than removed outright.
+- **Per-layer, once layers exist**: this instrument selector is described
+  above as document-wide because that's the current (and v1) scope. Once
+  [layers.md](./layers.md) lands, each layer gets its own instrument
+  settings and its own `Tone.Sampler`/`Tone.PolySynth` instance — the Sound
+  drawer then edits whichever layer is currently active, not a single
+  global instrument. No change to the underlying Tone.js approach, just to
+  how many instances of it exist.
 
 ---
 

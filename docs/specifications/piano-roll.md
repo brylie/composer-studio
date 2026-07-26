@@ -269,12 +269,11 @@ undo/redo → [command-history.md](./command-history.md); selection and bulk
 transform operations → [selection.md](./selection.md) and
 [transformations.md](./transformations.md); reverb/delay and a real piano
 sound → [libraries.md](./libraries.md); scale-aware highlighting →
-[tracks.md](./tracks.md). What's left, still genuinely open:
+[tracks.md](./tracks.md); multi-instrument orchestration →
+[layers.md](./layers.md) (one shared piano roll with instruments as
+reorderable layers, not multiple lanes — resolves what "multi-track
+sequencing" actually means for this app). What's left, still genuinely open:
 
 - Web MIDI API recording from a physical keyboard/controller
-- Multi-track sequencing (multiple piano-roll lanes) — the state-ownership
-  model already supports one instance per lane (see
-  [state-ownership.md](./state-ownership.md)); what's still undesigned is the
-  UI/UX of multiple simultaneous piano-roll lanes itself
 - Velocity lane editing beyond single-note drag (batch/ramp editing) — see
   [editing-model.md](./editing-model.md#future-work)

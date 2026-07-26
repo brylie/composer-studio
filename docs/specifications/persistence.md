@@ -57,6 +57,12 @@ interface ProjectFile {
 Plain JSON — human-diffable (relevant for "pass the file to my friend, they
 tweak something, they send it back"), no binary encoding.
 
+Not shown above because it isn't part of the current v1 schema: when
+[layers.md](./layers.md) lands, `ProjectFile` gains a `layers: LayerStack`
+field and `Note` gains `layerId`, via exactly the migration-chain mechanism
+below — a clean, concrete instance of the additive-schema-change case this
+document was designed for (see [layers.md#persistence](./layers.md#persistence)).
+
 ### What's deliberately *not* persisted
 
 - **Undo/redo history** — resets on load/reopen. Carrying history across a

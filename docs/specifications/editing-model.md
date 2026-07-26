@@ -47,7 +47,10 @@ Including two notes at the same pitch with overlapping time ranges. No
 automatic trimming, no blocking. This matches conventional piano-roll
 behavior (Ableton, Logic, FL Studio all allow it) and requires no special
 handling in the audio engine, which already schedules each note
-independently rather than assuming monophony per pitch.
+independently rather than assuming monophony per pitch. This holds
+regardless of layer, too: [layers.md](./layers.md#rendering-and-interaction-rules)'s
+top-layer-wins-on-overlap rule only affects which note renders on top in the
+grid — both still play, layers never trim or block on the audio side.
 
 ### `totalBeats` auto-extends
 

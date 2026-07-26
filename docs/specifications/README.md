@@ -16,6 +16,7 @@ sequencing (what to build first and why), see [roadmap.md](./roadmap.md).
 | [ribbon.md](./ribbon.md) | Ribbon UI/UX: data structure, responsive behavior, keyboard shortcuts |
 | [overlay-shells.md](./overlay-shells.md) | The shared bottom-sheet/side-drawer pattern used by the parameter drawer, Sound drawer, and note inspector |
 | [tracks.md](./tracks.md) | Scale track (specified), chord and arranger tracks (placeholders) |
+| [layers.md](./layers.md) | Multiple instruments as Photoshop-style layers over one shared piano roll, not separate tracks — later-stage, but resolves how orchestration will actually work |
 | [command-palette.md](./command-palette.md) | Future milestone — searchable command palette over the same registry |
 | [accessibility.md](./accessibility.md) | Living cross-cutting standard referenced by all of the above |
 | [state-ownership.md](./state-ownership.md) | Application state lives behind a root-provided Svelte context, not a bare module singleton — supports nested overrides for multi-instance and test isolation |
@@ -32,12 +33,17 @@ sequencing (what to build first and why), see [roadmap.md](./roadmap.md).
 **v1 targets a single piano-roll timeline** — one `Note[]` collection, one
 undo history, one ribbon instance. Melody and generated accompaniment (e.g.
 voice-led chords) coexist as notes on that same timeline, distinguished only
-by pitch register and selection, not by separate tracks or instruments — this
-is deliberately simple and is what makes piano composition a good starting
-target. Orchestration (independent tracks per instrument, multiple
-simultaneous editors) is real future work, not a v1 concern — state
-ownership is already set up to support it without a later rewrite (see
-[state-ownership.md](./state-ownership.md)).
+by pitch register and selection, not yet by separate instruments — this is
+deliberately simple and is what makes piano composition a good starting
+target. Multi-instrument orchestration is real future work, not a v1
+concern, but its shape is already resolved: **layers, not separate tracks
+or editor instances** — one shared pitch/time space, instruments
+distinguished by which layer a note belongs to (see
+[layers.md](./layers.md)). This also settles what
+[state-ownership.md](./state-ownership.md)'s multi-instance support is
+actually for: genuinely separate documents and test isolation, not
+per-instrument editing, which stays on one document/selection/undo-history
+throughout.
 
 ### Explicit non-goals (for now)
 

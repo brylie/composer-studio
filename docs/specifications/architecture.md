@@ -44,7 +44,7 @@ language on top of the framework's own.
 
 | Layer | File type | Contains | May import |
 | --- | --- | --- | --- |
-| **Domain** | plain `.ts`, zero Svelte/DOM/browser-API imports | Types (`Note`, `ScaleEvent`, `ChordEvent`, ...), the tonal.js adapter, transform/generator `run()`/`isApplicable()`, timeline event resolution, editing invariants (clamp/snap/overlap) | Nothing in this app; may depend on a well-chosen external library (tonal.js) fully contained within its own adapter |
+| **Domain** | plain `.ts`, zero Svelte/DOM/browser-API imports | Types (`Note`, `ScaleEvent`, `ChordEvent`, `Layer`, ...), the tonal.js adapter, transform/generator `run()`/`isApplicable()`, timeline event resolution, editing invariants (clamp/snap/overlap) | Nothing in this app; may depend on a well-chosen external library (tonal.js) fully contained within its own adapter |
 | **Application state** | `.svelte.ts` modules instantiated behind a root-provided Svelte context (per [state-ownership.md](./state-ownership.md)) | `store.svelte.ts`, selection state, `CommandHistory`, ribbon UI state | Domain, Infrastructure adapters |
 | **Infrastructure adapters** | plain `.ts`, each wraps one external/browser API | `audio.ts`/the Tone.js wrapper, `midi-export.ts`, the IndexedDB persistence module | Domain only |
 | **UI** | `.svelte` components | Everything currently in `src/lib/piano-roll/*.svelte`, the ribbon, drawers | Application state only |
