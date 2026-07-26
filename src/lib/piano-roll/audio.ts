@@ -127,6 +127,7 @@ export function startPlayback(options: PlaybackOptions): void {
     }
   }
 
+  schedule();
   _intervalId = setInterval(schedule, INTERVAL_MS);
 
   function tick(): void {
