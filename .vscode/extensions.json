@@ -1,4 +1,6 @@
 {
-  "recommendations": ["astro-build.astro-vscode"],
+  "recommendations": [
+    "svelte.svelte-vscode"
+  ],
   "unwantedRecommendations": []
 }
