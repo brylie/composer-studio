@@ -1,14 +1,13 @@
-/// <reference types="vitest/config" />
 import { paraglideVitePlugin } from '@inlang/paraglide-js';
-import { mdsvex } from 'mdsvex';
-import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vitest/config';
-import { playwright } from '@vitest/browser-playwright';
+import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 import adapter from '@sveltejs/adapter-auto';
 import { sveltekit } from '@sveltejs/kit/vite';
+import tailwindcss from '@tailwindcss/vite';
+import { playwright } from '@vitest/browser-playwright';
+import { mdsvex } from 'mdsvex';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
+import { defineConfig } from 'vitest/config';
 const dirname =
 	typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +41,17 @@ export default defineConfig({
 	test: {
 		expect: {
 			requireAssertions: true
+		},
+		coverage: {
+			provider: 'v8',
+			include: ['src/lib/piano-roll/history.ts', 'src/lib/piano-roll/types.ts'],
+			thresholds: {
+				lines: 80,
+				functions: 80,
+				branches: 80,
+				statements: 80
+			},
+			reporter: ['text', 'lcov']
 		},
 		projects: [
 			{
