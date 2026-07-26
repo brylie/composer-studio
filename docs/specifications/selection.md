@@ -60,7 +60,7 @@ Shift-click range-select needs to remember where a selection gesture started:
 
 ```typescript
 interface SelectionAnchor {
-	noteId: string; // looked up in the *current* sorted note order at use-time — see below
+  noteId: string; // looked up in the *current* sorted note order at use-time — see below
 }
 ```
 
@@ -72,9 +72,9 @@ directly into the range-selection function at the moment of the shift-click
 
 ```typescript
 function selectRange(anchor: SelectionAnchor, focusNoteId: string, sortedNotes: Note[]) {
-	const anchorIndex = sortedNotes.findIndex((n) => n.id === anchor.noteId);
-	const focusIndex = sortedNotes.findIndex((n) => n.id === focusNoteId);
-	// select every note between the two indices, inclusive, regardless of order
+  const anchorIndex = sortedNotes.findIndex((n) => n.id === anchor.noteId);
+  const focusIndex = sortedNotes.findIndex((n) => n.id === focusNoteId);
+  // select every note between the two indices, inclusive, regardless of order
 }
 ```
 
@@ -93,22 +93,22 @@ This is the object every `CommandDescriptor.isApplicable()` and `.run()` in
 
 ```typescript
 interface SelectionContext {
-	notes: Note[]; // selected notes, sorted by startBeat then midiNote
-	count: number;
-	pitchRange: { min: number; max: number } | null;
-	beatRange: { start: number; end: number } | null;
-	isContiguous: boolean; // the union of note intervals has no gaps — see below, NOT a naive pairwise check
-	activeScales: ActiveScaleSegment[]; // see below
-	activeLayers: Layer[]; // distinct layers referenced by `notes` — see layers.md
+  notes: Note[]; // selected notes, sorted by startBeat then midiNote
+  count: number;
+  pitchRange: { min: number; max: number } | null;
+  beatRange: { start: number; end: number } | null;
+  isContiguous: boolean; // the union of note intervals has no gaps — see below, NOT a naive pairwise check
+  activeScales: ActiveScaleSegment[]; // see below
+  activeLayers: Layer[]; // distinct layers referenced by `notes` — see layers.md
 }
 ```
 
 ```typescript
 const selectionContext = $derived.by((): SelectionContext => {
-	const notes = store.notes
-		.filter((n) => selectedNoteIds.has(n.id))
-		.sort((a, b) => a.startBeat - b.startBeat || a.midiNote - b.midiNote);
-	// ...derive count / pitchRange / beatRange / isContiguous / activeScales
+  const notes = store.notes
+    .filter((n) => selectedNoteIds.has(n.id))
+    .sort((a, b) => a.startBeat - b.startBeat || a.midiNote - b.midiNote);
+  // ...derive count / pitchRange / beatRange / isContiguous / activeScales
 });
 ```
 
@@ -119,7 +119,7 @@ soon as one selected note fully covers a shorter one that sorts right after
 it — e.g. a 10-beat-long note from beat 0, a short 2-beat note nested inside
 it starting at beat 2, then a third note starting exactly at beat 10.
 Sorted by `startBeat`, the pairwise check compares the first note's `endBeat`
-(10) against the *second* note's `startBeat` (2) and reports a gap, even
+(10) against the _second_ note's `startBeat` (2) and reports a gap, even
 though the three notes' combined time coverage is one unbroken span from 0
 to past the third note's start. The correct definition evaluates the union
 of intervals instead — track the greatest `endBeat` seen so far while
@@ -129,14 +129,14 @@ predecessor's `endBeat`:
 
 ```typescript
 function isContiguous(notes: Note[]): boolean {
-	let coveredUntil = -Infinity;
-	for (const note of notes) {
-		if (note.startBeat > coveredUntil) {
-			if (coveredUntil !== -Infinity) return false; // a real gap, not just the first note
-		}
-		coveredUntil = Math.max(coveredUntil, note.startBeat + note.durationBeats);
-	}
-	return true;
+  let coveredUntil = -Infinity;
+  for (const note of notes) {
+    if (note.startBeat > coveredUntil) {
+      if (coveredUntil !== -Infinity) return false; // a real gap, not just the first note
+    }
+    coveredUntil = Math.max(coveredUntil, note.startBeat + note.durationBeats);
+  }
+  return true;
 }
 ```
 
@@ -146,7 +146,7 @@ including the covering-note case above — only a genuine gap in the union
 
 Each transformation declares its own minimum-selection rule against this shape
 (e.g. retrograde needs `count >= 1`, a chord-aware re-harmonization might need
-`count >= 2`) — the *rule* lives with the command, not here. This module only
+`count >= 2`) — the _rule_ lives with the command, not here. This module only
 guarantees the shape is accurate and reactive.
 
 #### `activeScales`: selections aren't bounded by scale boundaries
@@ -159,9 +159,9 @@ silently reports only the first scale and ignores the rest of the selection.
 
 ```typescript
 interface ActiveScaleSegment {
-	scale: ScaleEvent;
-	start: number; // beats — clamped to the selection's own beatRange, not the scale event's full span
-	end: number; // beats — likewise clamped; Infinity-until-next-event becomes "until selection end" here
+  scale: ScaleEvent;
+  start: number; // beats — clamped to the selection's own beatRange, not the scale event's full span
+  end: number; // beats — likewise clamped; Infinity-until-next-event becomes "until selection end" here
 }
 ```
 
@@ -208,15 +208,15 @@ that.
 
 ## Selection modes
 
-| Gesture                          | Result                                                        | Status               |
-| --------------------------------- | -------------------------------------------------------------- | --------------------- |
-| Click a note                      | Replace selection with that note                               | Exists                |
-| Ctrl/Cmd+click a note              | Toggle that note in/out of selection                            | Exists                |
-| Shift+click a note                 | Select the range between the anchor and the clicked note        | New                    |
-| Drag on empty grid space, in `'select'` mode (or ctrl/shift+drag in `'draw'` mode) | Marquee (bounding-box) select — rectangle intersect vs. note rects in beat/pitch space | New |
-| Ctrl/Cmd+A                          | Select all — visible, unlocked layers only (see [layers.md](./layers.md)) | Exists |
-| Escape                              | Deselect all, unconditionally, regardless of mode              | Exists                |
-| Click empty space, in `'select'` mode | Deselect all (the zero-size-lasso case)                       | New                    |
+| Gesture                                                                            | Result                                                                                 | Status |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------ |
+| Click a note                                                                       | Replace selection with that note                                                       | Exists |
+| Ctrl/Cmd+click a note                                                              | Toggle that note in/out of selection                                                   | Exists |
+| Shift+click a note                                                                 | Select the range between the anchor and the clicked note                               | New    |
+| Drag on empty grid space, in `'select'` mode (or ctrl/shift+drag in `'draw'` mode) | Marquee (bounding-box) select — rectangle intersect vs. note rects in beat/pitch space | New    |
+| Ctrl/Cmd+A                                                                         | Select all — visible, unlocked layers only (see [layers.md](./layers.md))              | Exists |
+| Escape                                                                             | Deselect all, unconditionally, regardless of mode                                      | Exists |
+| Click empty space, in `'select'` mode                                              | Deselect all (the zero-size-lasso case)                                                | New    |
 
 Click/drag on empty space is **not** unconditional the way Escape is — in
 `'draw'` mode (the default) both gestures mean "create a note" instead, per
@@ -267,17 +267,17 @@ type GridInteractionMode = 'draw' | 'select';
 ## Mode-based interaction semantics
 
 `GridInteractionMode` (`'draw' | 'select'`, introduced above for the touch
-case) actually determines the meaning of *every* tap/click and drag in the
+case) actually determines the meaning of _every_ tap/click and drag in the
 grid, on both desktop and touch — it's not touch-only. Desktop layers
 modifier keys on top of `'draw'` mode rather than requiring an explicit mode
 switch; touch requires the switch since it has no modifiers.
 
-| Gesture                    | `'draw'` mode                          | `'select'` mode                                  |
-| --------------------------- | ---------------------------------------- | --------------------------------------------------- |
-| Tap/click empty space        | Create note                             | Start a lasso (marquee) rectangle                   |
-| Tap/click existing note      | Delete note (touch) / select (desktop, see note below) | Toggle that note in/out of selection |
-| Drag from empty space        | Pans the grid (touch) / draws a note, dragging sets its initial duration (desktop, unmodified — per [piano-roll.md](./piano-roll.md#note-grid--main-scrollable-canvas)); ctrl/shift+drag marquee-selects instead, same modifier-layered-on-`'draw'` pattern as click | Lasso select |
-| Drag an existing note        | Move note                               | Move the *entire current selection* (if the dragged note is already selected) or replace-and-move (if not) |
+| Gesture                 | `'draw'` mode                                                                                                                                                                                                                                                        | `'select'` mode                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Tap/click empty space   | Create note                                                                                                                                                                                                                                                          | Start a lasso (marquee) rectangle                                                                          |
+| Tap/click existing note | Delete note (touch) / select (desktop, see note below)                                                                                                                                                                                                               | Toggle that note in/out of selection                                                                       |
+| Drag from empty space   | Pans the grid (touch) / draws a note, dragging sets its initial duration (desktop, unmodified — per [piano-roll.md](./piano-roll.md#note-grid--main-scrollable-canvas)); ctrl/shift+drag marquee-selects instead, same modifier-layered-on-`'draw'` pattern as click | Lasso select                                                                                               |
+| Drag an existing note   | Move note                                                                                                                                                                                                                                                            | Move the _entire current selection_ (if the dragged note is already selected) or replace-and-move (if not) |
 
 Desktop's "tap existing note" behavior differs from touch by necessity: a
 desktop click on a note selects it (so a subsequent drag can move it),
@@ -297,7 +297,7 @@ cross-app paste isn't a goal here):
 
 ```typescript
 interface ClipboardContents {
-	notes: Note[]; // positions stored relative to the earliest selected startBeat; layerId preserved as-is
+  notes: Note[]; // positions stored relative to the earliest selected startBeat; layerId preserved as-is
 }
 ```
 

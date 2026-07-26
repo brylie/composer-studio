@@ -12,11 +12,11 @@ not its own shell.
 
 ## Known consumers
 
-| Consumer | Content |
-| --- | --- |
+| Consumer                | Content                                                                                                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Ribbon parameter drawer | `CommandParamsForm`, schema-driven from a command's `ParamField[]` — see [transformations.md](./transformations.md#command-descriptor) and [ribbon.md](./ribbon.md#parameter-drawer) |
-| Sound drawer | Instrument/preset/envelope/filter controls — see [piano-roll.md](./piano-roll.md#synth-panel--responsive-sound-drawer) |
-| Note inspector | Pitch/start/duration/velocity fields — see [editing-model.md](./editing-model.md#note-inspector-precise-numeric-entry) |
+| Sound drawer            | Instrument/preset/envelope/filter controls — see [piano-roll.md](./piano-roll.md#synth-panel--responsive-sound-drawer)                                                               |
+| Note inspector          | Pitch/start/duration/velocity fields — see [editing-model.md](./editing-model.md#note-inspector-precise-numeric-entry)                                                               |
 
 Any future overlay with the same "small form, dismissible, device-dependent
 presentation" shape should reuse this rather than growing a fourth bespoke
@@ -28,13 +28,13 @@ implementation.
 
 ```svelte
 {#snippet content()}
-	<!-- consumer-supplied markup -->
+  <!-- consumer-supplied markup -->
 {/snippet}
 
 {#if isMobile}
-	<BottomSheet onclose={cancel}>{@render content()}</BottomSheet>
+  <BottomSheet onclose={cancel}>{@render content()}</BottomSheet>
 {:else}
-	<SideDrawer onclose={cancel}>{@render content()}</SideDrawer>
+  <SideDrawer onclose={cancel}>{@render content()}</SideDrawer>
 {/if}
 ```
 

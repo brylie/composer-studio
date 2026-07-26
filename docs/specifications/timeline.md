@@ -16,14 +16,14 @@ reads from and writes to.
 
 ## Coordinate system
 
-| Unit  | Meaning                                | Notes                                             |
-| ----- | --------------------------------------- | -------------------------------------------------- |
-| Beat  | Quarter-note beat, canonical unit       | Already used throughout `piano-roll` (`startBeat`) |
-| Bar   | Derived from the active time signature  | Not currently modelled — see below                |
-| Tick  | 480 ticks / quarter note                | Only used at MIDI export time (`midi-export.ts`)   |
+| Unit | Meaning                                | Notes                                              |
+| ---- | -------------------------------------- | -------------------------------------------------- |
+| Beat | Quarter-note beat, canonical unit      | Already used throughout `piano-roll` (`startBeat`) |
+| Bar  | Derived from the active time signature | Not currently modelled — see below                 |
+| Tick | 480 ticks / quarter note               | Only used at MIDI export time (`midi-export.ts`)   |
 
-Beats remain the canonical unit for all in-memory state. Bars are a *display and
-snapping* concept derived from the time-signature track, not stored on events.
+Beats remain the canonical unit for all in-memory state. Bars are a _display and
+snapping_ concept derived from the time-signature track, not stored on events.
 Ticks only exist at the MIDI-export boundary.
 
 ### Time signature is currently hardcoded
@@ -41,7 +41,7 @@ floating-point beats as canonical instead, and treats "snap" purely as an
 editing aid layered on top — the existing `snapBeats = 4 / snapDenominator`
 already works this way. The reason: `jitter`
 ([transformations.md](./transformations.md)) and other humanization-style
-transforms need to nudge notes *off* the grid by sub-snap amounts, which an
+transforms need to nudge notes _off_ the grid by sub-snap amounts, which an
 always-quantized integer-step model can't represent without a parallel
 "micro-timing offset" field bolted on. Continuous beats support that natively
 — a note's position is just a number, snap or no snap.
@@ -52,7 +52,7 @@ Because beats are continuous floats, "resolution" is not a data-model limit
 — it's entirely a property of whatever's writing the number. A quarter note
 is `1.0`, an eighth is `0.5`, a sixteenth is `0.25`, and a triplet eighth is
 `1/3`: all equally representable, today, with no change needed here. What
-*is* currently limited is the snap-grid UI: `SnapDenominator` is
+_is_ currently limited is the snap-grid UI: `SnapDenominator` is
 `1 | 2 | 4 | 8 | 16` ([types.ts](../../src/lib/piano-roll/types.ts)), a
 straight power-of-two series with no triplet or other non-binary division.
 That's a small, additive UI gap, not an architectural one — worth tracking
@@ -62,7 +62,7 @@ as future work rather than solving now:
   eighth-note, sixteenth-note triplets) — just more entries in the same snap
   picker, no new concept. Standard in every DAW's snap/quantize UI.
 - **Polymetric/polyrhythmic quantization** — snapping different selections
-  or tracks to *different* divisions of the beat at once (e.g. a 3-against-2
+  or tracks to _different_ divisions of the beat at once (e.g. a 3-against-2
   cross-rhythm), which is a real generative/compositional technique — the
   `euclidean-rhythm` generator in [transformations.md](./transformations.md)
   already produces non-binary groupings. This is more than a snap-picker
@@ -96,7 +96,7 @@ a rethink. tonal.js has no bearing here at all: it models pitch space only
 
 ## Event tracks
 
-A **timeline event** is a point-in-time marker that changes a *context value*
+A **timeline event** is a point-in-time marker that changes a _context value_
 from its beat onward, until superseded by the next event of the same type. This
 is the same model as MIDI meta-events (tempo, time signature) and is what makes
 scale/chord/arranger tracks a family rather than three unrelated features.
@@ -119,7 +119,7 @@ as written, rather than only being described as one.
 
 ```typescript
 function activeEventAt<T>(track: EventTrack<T>, beat: number): TimelineEvent<T> | undefined {
-	// last event with event.beat <= beat (binary search over the sorted array)
+  // last event with event.beat <= beat (binary search over the sorted array)
 }
 ```
 
@@ -143,14 +143,14 @@ overlap policy.
 
 ### Track types built on this abstraction
 
-| Track           | Payload                          | Status                                  |
-| --------------- | --------------------------------- | ---------------------------------------- |
-| Tempo           | `{ bpm: number }`                 | Formalises the existing single `tempo`  |
-| Time signature  | `{ numerator, denominator }`      | New — replaces the hardcoded 4-beat bar |
-| Scale           | see [tracks.md](./tracks.md)      | Specified                                |
-| Chord           | see [tracks.md](./tracks.md)      | Placeholder                              |
-| Labels          | see [tracks.md](./tracks.md)      | Placeholder                              |
-| Arranger        | *sections*, not point events      | Placeholder — see below                  |
+| Track          | Payload                      | Status                                  |
+| -------------- | ---------------------------- | --------------------------------------- |
+| Tempo          | `{ bpm: number }`            | Formalises the existing single `tempo`  |
+| Time signature | `{ numerator, denominator }` | New — replaces the hardcoded 4-beat bar |
+| Scale          | see [tracks.md](./tracks.md) | Specified                               |
+| Chord          | see [tracks.md](./tracks.md) | Placeholder                             |
+| Labels         | see [tracks.md](./tracks.md) | Placeholder                             |
+| Arranger       | _sections_, not point events | Placeholder — see below                 |
 
 Notes themselves (`Note[]`) are **not** an event track — they're a flat
 collection positioned on the timeline, not a "current value" concept.
@@ -165,11 +165,11 @@ Sections answer "what spans this range?" and additionally need **move** and
 
 ```typescript
 interface ArrangerSection {
-	id: string;
-	label: string;
-	startBeat: number;
-	endBeat: number; // exclusive
-	color: string;
+  id: string;
+  label: string;
+  startBeat: number;
+  endBeat: number; // exclusive
+  color: string;
 }
 ```
 
@@ -187,7 +187,7 @@ Moving or duplicating a section must decide what happens to:
 This spec intentionally leaves #2 open — it's a real product decision (ripple
 vs. free placement) that should be made when the arranger track is actually
 scheduled, not guessed at now. Both are representable with the `EventTrack`
-model above; only the *edit operation* differs. In the meantime,
+model above; only the _edit operation_ differs. In the meantime,
 [tracks.md](./tracks.md#v1-default-annotation-only-no-content-ripple)
 specifies a simpler v1 default (sections are annotation-only, #1 doesn't
 apply yet either) so the arranger lane is useful before this question has to
@@ -208,16 +208,16 @@ component that consumes this.
 
 ```typescript
 interface TempoEvent {
-	id: string;
-	beat: number;
-	bpm: number;
+  id: string;
+  beat: number;
+  bpm: number;
 }
 
 interface TimeSignatureEvent {
-	id: string;
-	beat: number;
-	numerator: number;
-	denominator: number;
+  id: string;
+  beat: number;
+  numerator: number;
+  denominator: number;
 }
 
 type TempoTrack = TempoEvent[];

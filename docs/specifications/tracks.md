@@ -16,10 +16,10 @@ block the scale track's design, not enough detail to pretend they're decided.
 
 ```typescript
 interface ScaleEvent {
-	id: string;
-	beat: number;
-	root: number; // pitch class 0–11 (0 = C), matches NOTE_NAMES in types.ts
-	mode: string; // tonal.js scale name ('major', 'dorian', 'harmonic minor', ...) — see libraries.md
+  id: string;
+  beat: number;
+  root: number; // pitch class 0–11 (0 = C), matches NOTE_NAMES in types.ts
+  mode: string; // tonal.js scale name ('major', 'dorian', 'harmonic minor', ...) — see libraries.md
 }
 
 type ScaleTrack = ScaleEvent[]; // an EventTrack<ScaleEvent> per timeline.md
@@ -41,15 +41,16 @@ between consecutive scale events, not globally:
 // for the currently visible beat range [viewStart, viewEnd):
 const carryIn = activeEventAt(scaleTrack, viewStart); // per timeline.md — the scale
 // already active when the viewport starts, even if it was placed well before viewStart
-const withinView = scaleEventsOverlapping(scaleTrack, viewStart, viewEnd)
-	.filter((event) => event.id !== carryIn?.id); // avoid double-counting if it's also the first in-view event
+const withinView = scaleEventsOverlapping(scaleTrack, viewStart, viewEnd).filter(
+  (event) => event.id !== carryIn?.id,
+); // avoid double-counting if it's also the first in-view event
 
 const events = carryIn ? [carryIn, ...withinView] : withinView;
 
 const segments = events.map((event, i, all) => ({
-	startBeat: Math.max(event.beat, viewStart), // clamp — carryIn's own beat may be long before viewStart
-	endBeat: Math.min(all[i + 1]?.beat ?? viewEnd, viewEnd),
-	scaleDegrees: pitchClassesFor(event.root, event.mode) // Set<number>, 0–11
+  startBeat: Math.max(event.beat, viewStart), // clamp — carryIn's own beat may be long before viewStart
+  endBeat: Math.min(all[i + 1]?.beat ?? viewEnd, viewEnd),
+  scaleDegrees: pitchClassesFor(event.root, event.mode), // Set<number>, 0–11
 }));
 ```
 
@@ -94,24 +95,24 @@ without being disallowed.
 The `quality` string alone (`'maj7'`, `'sus4'`, ...) isn't enough to drive the
 three things a chord event actually needs to do — highlight chord tones on
 the piano roll, check tension against the active scale, and feed
-`generate-chords`'s voicing math — all three need the *actual pitch classes*,
+`generate-chords`'s voicing math — all three need the _actual pitch classes_,
 not a name to re-parse each time. `quality` (looked up against an
 interval-set table) is the authoring convenience; `pitchClasses` is the
 derived form everything else consumes:
 
 ```typescript
 interface ChordEvent {
-	id: string;
-	beat: number;
-	root: number; // pitch class 0–11
-	quality: string; // tonal.js chord symbol ('maj7', 'sus4', 'm7b5', ...) — see libraries.md
+  id: string;
+  beat: number;
+  root: number; // pitch class 0–11
+  quality: string; // tonal.js chord symbol ('maj7', 'sus4', 'm7b5', ...) — see libraries.md
 }
 
 type ChordTrack = ChordEvent[];
 
 function pitchClassesForChord(chord: ChordEvent): Set<number> {
-	// backed by tonal.js's Chord.get(...), per libraries.md — not a
-	// hand-rolled interval table
+  // backed by tonal.js's Chord.get(...), per libraries.md — not a
+  // hand-rolled interval table
 }
 ```
 
@@ -128,17 +129,17 @@ scale track's segment-computation approach rather than inventing a new one.
    highlight than rows that are merely in-scale, and rows outside both get
    none. Same per-segment computation as the scale track, just intersecting
    two pitch-class sets (chord segments and scale segments) instead of one —
-   segment boundaries come from *both* tracks' events, so a chord change
+   segment boundaries come from _both_ tracks' events, so a chord change
    mid-scale-segment still produces a visible boundary.
 2. **Tension against the active scale** — replaces the earlier binary
    `isDiatonic` with the actual offending pitch classes, since "which notes
    clash" is more useful than "does it clash":
    ```typescript
    function tensionPitchClasses(chord: ChordEvent, scale: ScaleEvent | undefined): Set<number> {
-   	// pitchClassesForChord(chord) minus the scale's pitch classes — empty ⇒ fully diatonic
+     // pitchClassesForChord(chord) minus the scale's pitch classes — empty ⇒ fully diatonic
    }
    ```
-   An empty result *is* what "diatonic" meant before; a non-empty result can
+   An empty result _is_ what "diatonic" meant before; a non-empty result can
    drive a distinct visual treatment (e.g. an outline color for the specific
    chord tones that fall outside the scale) instead of a single flag.
 3. **`generate-chords` voicing input** — `source: 'chord-track'` in
@@ -148,7 +149,7 @@ scale track's segment-computation approach rather than inventing a new one.
    other label, only the resulting pitch classes.
 
 **A `ChordEvent` is still a harmony label, not sounding notes** — it does not
-itself produce audible notes. The actual chord *notes* that get voiced into
+itself produce audible notes. The actual chord _notes_ that get voiced into
 the piece are plain entries in the same `Note[]` collection the melody lives
 in, written by the `generate-chords` command. This separation is what lets a
 chord label be edited (change the harmony) without having to re-place
@@ -172,9 +173,9 @@ transformation's behavior.
 
 ```typescript
 interface LabelEvent {
-	id: string;
-	beat: number;
-	text: string;
+  id: string;
+  beat: number;
+  text: string;
 }
 
 type LabelTrack = LabelEvent[];

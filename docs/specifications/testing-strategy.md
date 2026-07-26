@@ -15,15 +15,15 @@ at the end.
 
 ## Three layers, three tools already in `package.json`
 
-| Layer | Tool | Target |
-| --- | --- | --- |
-| Unit | Vitest + `@vitest/coverage-v8` | 80% *meaningful* coverage of non-UI logic |
-| Component | Storybook + `@storybook/addon-a11y` | Every stateful component, all meaningfully distinct states, zero a11y violations |
-| Integration/E2E | Playwright | Cross-component flows, responsive behavior, keyboard-driven accessibility |
+| Layer           | Tool                                | Target                                                                           |
+| --------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
+| Unit            | Vitest + `@vitest/coverage-v8`      | 80% _meaningful_ coverage of non-UI logic                                        |
+| Component       | Storybook + `@storybook/addon-a11y` | Every stateful component, all meaningfully distinct states, zero a11y violations |
+| Integration/E2E | Playwright                          | Cross-component flows, responsive behavior, keyboard-driven accessibility        |
 
 ---
 
-## Vitest: 80% *meaningful* coverage
+## Vitest: 80% _meaningful_ coverage
 
 "Meaningful" is the operative word — chasing 80% line coverage by testing
 trivial Svelte template branches or pass-through getters produces a padded
@@ -67,17 +67,17 @@ state-machine logic that doesn't render anything itself.
 ## Storybook: component coverage, accessibility as a gate
 
 Every component a spec in this directory introduces gets a story per
-*meaningfully distinct state*, not just a default render:
+_meaningfully distinct state_, not just a default render:
 
-| Component | States worth a story each |
-| --- | --- |
-| RibbonButton | enabled, disabled-with-reason, icon-only (tablet/mobile) |
-| CommandParamsForm | one per `ParamField` type — number/stepper, range/slider, select, boolean |
-| BottomSheet / SideDrawer | open, drag-dismiss in progress (mobile), focus-trapped |
-| NoteGrid | empty, populated, selection states (single/multi/marquee-in-progress), scale-highlight segment boundaries |
-| PianoKeys | default range, mid-playback key-highlight |
-| EventTrackLane | one per track type it's parameterized for (scale/chord/labels/arranger) |
-| Sound drawer | bottom sheet (mobile), side drawer (tablet/desktop) — per [overlay-shells.md](./overlay-shells.md#shell-contract) |
+| Component                | States worth a story each                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| RibbonButton             | enabled, disabled-with-reason, icon-only (tablet/mobile)                                                          |
+| CommandParamsForm        | one per `ParamField` type — number/stepper, range/slider, select, boolean                                         |
+| BottomSheet / SideDrawer | open, drag-dismiss in progress (mobile), focus-trapped                                                            |
+| NoteGrid                 | empty, populated, selection states (single/multi/marquee-in-progress), scale-highlight segment boundaries         |
+| PianoKeys                | default range, mid-playback key-highlight                                                                         |
+| EventTrackLane           | one per track type it's parameterized for (scale/chord/labels/arranger)                                           |
+| Sound drawer             | bottom sheet (mobile), side drawer (tablet/desktop) — per [overlay-shells.md](./overlay-shells.md#shell-contract) |
 
 `@storybook/addon-a11y` runs against every story, and violations are meant
 to block merge once this is actually wired up — the same "not yet" as
@@ -85,7 +85,7 @@ to block merge once this is actually wired up — the same "not yet" as
 threshold. This document specifies what
 [accessibility.md](./accessibility.md#process) refers to only in general
 terms ("an a11y pass... before merging"): the concrete mechanism (this
-addon, against every Storybook story) that a *future* CI gate would enforce,
+addon, against every Storybook story) that a _future_ CI gate would enforce,
 once real components exist for it to run against.
 
 ---
@@ -93,7 +93,7 @@ once real components exist for it to run against.
 ## Playwright: what the other two layers can't reach
 
 Unit tests check logic in isolation; Storybook checks one component's own
-states. Playwright covers behavior that only exists *across* components, or
+states. Playwright covers behavior that only exists _across_ components, or
 depends on real browser mechanics (viewport size, focus order, IndexedDB):
 
 - Full flow: create notes → select → apply a transform → undo → redo, in the
@@ -110,7 +110,7 @@ depends on real browser mechanics (viewport size, focus order, IndexedDB):
 - Keyboard-only accessibility flows: tab through the ribbon in the correct
   roving-tabindex order, invoke a command via keyboard, `Escape` closes a
   drawer/palette and restores focus to the invoking control — this is
-  *behavioral* accessibility that a static per-component a11y scan can't
+  _behavioral_ accessibility that a static per-component a11y scan can't
   catch, since it's about an interaction sequence, not one rendered state
 - Mobile piano-roll touch flow, at a mobile viewport with touch emulation:
   tap-to-create and tap-to-delete on an existing note, the tap-vs-drag

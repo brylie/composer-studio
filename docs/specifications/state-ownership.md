@@ -23,7 +23,7 @@ Framed as an either/or, this was worth deferring: the near-term scope is one
 document, one editor instance on screen, and a bare singleton has zero setup
 cost under those conditions. But it isn't really either/or — a **root-level
 provider with the option to nest a second one** gets the singleton's
-zero-friction default *and* keeps a subtree free to opt into its own
+zero-friction default _and_ keeps a subtree free to opt into its own
 isolated instance later, for about the same implementation cost as adopting
 context at all. That's the resolution below.
 
@@ -36,9 +36,9 @@ real instances and calls `setContext` for each — `store`, selection state,
 ```svelte
 <!-- +layout.svelte -->
 <script lang="ts">
-	import { provideEditorState } from '$lib/piano-roll/context.svelte';
-	provideEditorState(); // calls setContext(...) once, during init
-	let { children } = $props();
+  import { provideEditorState } from '$lib/piano-roll/context.svelte';
+  provideEditorState(); // calls setContext(...) once, during init
+  let { children } = $props();
 </script>
 
 {@render children()}
@@ -53,19 +53,19 @@ import { getContext, setContext } from 'svelte';
 const KEY = Symbol('editor-state');
 
 export function provideEditorState() {
-	const state = { store: createStore(), history: new CommandHistory() /* ... */ };
-	setContext(KEY, state);
-	return state;
+  const state = { store: createStore(), history: new CommandHistory() /* ... */ };
+  setContext(KEY, state);
+  return state;
 }
 
 export function getEditorState() {
-	return getContext(KEY); // throws clearly if no provider is an ancestor
+  return getContext(KEY); // throws clearly if no provider is an ancestor
 }
 ```
 
 For the single-timeline v1 scope, this behaves exactly like today's
 singleton: one provider, set once, read everywhere below it. The difference
-only shows up when something needs to *not* share that instance — a
+only shows up when something needs to _not_ share that instance — a
 component wraps its own subtree in a second `provideEditorState()` call,
 and everything inside that subtree reads the nested instance instead,
 automatically, because `getContext` always resolves to the nearest ancestor
@@ -88,13 +88,13 @@ setup cost once, up front, and gets every entry in the table's "context"
 column for free from that point on — there's no cheaper way to keep the
 option open:
 
-| | Singleton `.svelte.ts` module | Root-provided context (this decision) |
-| --- | --- | --- |
-| Cost for the current single-instance scope | Zero | One provider component + a getter per consumer — small, one-time |
-| Multiple independent instances (separate documents, tests) | Not possible without a rewrite | Nest a second provider — no rewrite of consumers |
-| SSR safety | Risk: shared module state can leak across requests | Safe — scoped per component tree/request |
-| Testability in isolation | Harder — state persists across test cases/stories unless manually reset | Easier — wrap a test/story in its own provider for a fresh instance |
-| Consistency with existing code | Matches `store.svelte.ts` exactly | New pattern, deliberately introduced once (this doc), not mixed ad hoc |
+|                                                            | Singleton `.svelte.ts` module                                           | Root-provided context (this decision)                                  |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Cost for the current single-instance scope                 | Zero                                                                    | One provider component + a getter per consumer — small, one-time       |
+| Multiple independent instances (separate documents, tests) | Not possible without a rewrite                                          | Nest a second provider — no rewrite of consumers                       |
+| SSR safety                                                 | Risk: shared module state can leak across requests                      | Safe — scoped per component tree/request                               |
+| Testability in isolation                                   | Harder — state persists across test cases/stories unless manually reset | Easier — wrap a test/story in its own provider for a fresh instance    |
+| Consistency with existing code                             | Matches `store.svelte.ts` exactly                                       | New pattern, deliberately introduced once (this doc), not mixed ad hoc |
 
 Composer Studio is still a client-only editor, not multi-tenant SSR, so the
 SSR-leak risk isn't an active problem — but it isn't the deciding factor
@@ -126,7 +126,7 @@ mechanism's job. What nesting a second provider is still genuinely for:
 
 ## Migration cost, named honestly
 
-This is not free relative to *today's* code: `store.svelte.ts`, and the
+This is not free relative to _today's_ code: `store.svelte.ts`, and the
 selection/`CommandHistory`/ribbon-state modules specified elsewhere in this
 directory, currently assume "import the module" and would need to become
 "call the getter inside component init" instead. That migration should
