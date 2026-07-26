@@ -25,5 +25,9 @@ export function provideEditorState(): EditorState {
  * is an ancestor — call only during component initialisation.
  */
 export function getEditorState(): EditorState {
-  return getContext<EditorState>(KEY);
+  const state = getContext<EditorState | undefined>(KEY);
+  if (!state) {
+    throw new Error('Editor state not found; did you forget to call provideEditorState()?');
+  }
+  return state;
 }
