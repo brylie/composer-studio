@@ -157,6 +157,22 @@ export function createStore() {
     });
   }
 
+  /**
+   * Applies per-note updates in a single pass over the notes array. Use this
+   * instead of calling updateNote() in a loop (e.g. during multi-note drag)
+   * to avoid re-traversing the full array once per note.
+   */
+  function updateNotes(updatesById: Map<string, Partial<Note>>) {
+    if (updatesById.size === 0) return;
+    notes = notes.map((n) => {
+      const updates = updatesById.get(n.id);
+      if (!updates) return n;
+      const merged = clampNote({ ...n, ...updates });
+      extendTotalBeatsIfNeeded(merged);
+      return merged;
+    });
+  }
+
   function clearNotes() {
     notes = [];
     selectedNoteIds.clear();
@@ -437,6 +453,7 @@ export function createStore() {
     addNote,
     removeNote,
     updateNote,
+    updateNotes,
     clearNotes,
     selectNote,
     selectAll,

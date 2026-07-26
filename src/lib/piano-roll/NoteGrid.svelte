@@ -2,6 +2,7 @@
   import { getEditorState } from './context.svelte.js';
   const { store } = getEditorState();
   import { isBlackKey, MIN_MIDI, MAX_MIDI, NOTE_COUNT } from './types.js';
+  import type { Note } from './types.js';
   import { auditionNote } from './audio.js';
   import { SvelteMap } from 'svelte/reactivity';
 
@@ -188,18 +189,20 @@
         didSnapshotDrag = true;
       }
       if (multiDragInitialPositions) {
-        // Move all selected notes by the same snapped delta
+        // Move all selected notes by the same snapped delta in a single batch
         const rawDelta = beat - dragStartBeat;
         const snappedDelta = Math.round(rawDelta / snap) * snap;
         const rowDelta = row - dragStartRow;
+        const updates = new SvelteMap<string, Partial<Note>>();
         for (const [id, init] of multiDragInitialPositions) {
           const newBeat = Math.max(0, init.startBeat + snappedDelta);
           const newRow = Math.max(
             0,
             Math.min(NOTE_COUNT - 1, rowForMidi(init.midiNote) + rowDelta),
           );
-          store.updateNote(id, { startBeat: newBeat, midiNote: midiForRow(newRow) });
+          updates.set(id, { startBeat: newBeat, midiNote: midiForRow(newRow) });
         }
+        store.updateNotes(updates);
       } else {
         const newBeat = snapFloor(beat - dragOffsetBeat);
         const newRow = Math.max(0, Math.min(NOTE_COUNT - 1, row - dragOffsetRow));
