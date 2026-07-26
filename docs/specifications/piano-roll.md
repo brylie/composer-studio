@@ -77,7 +77,9 @@ interface SynthSettings {
   snapDenominator: 1 | 2 | 4 | 8 | 16;  // denominator of note value
   showVelocity: boolean;
   loopEnabled: boolean;
-  totalBeats: number;       // loop length in beats (default 64 = 16 bars)
+  loopStart: number;        // beat, default 0 — draggable via ruler markers, see Ruler below
+  loopEnd: number;          // beat, default = totalBeats
+  totalBeats: number;       // project/timeline length in beats (default 64 = 16 bars)
   pixelsPerBeat: number;    // horizontal zoom (default 80)
   rowHeight: number;        // px per semitone row (default 24)
   tempo: number;            // BPM (default 120)
@@ -106,6 +108,21 @@ interface SynthSettings {
 | Clear All      | Removes all notes after confirmation                                 |
 | Export MIDI    | Downloads a type-0 `.mid` file                                       |
 
+### Ruler
+
+- Displays bar numbers along the top of the note grid, synced to the same
+  horizontal scroll/zoom as the grid body (and, per
+  [timeline.md](./timeline.md#synced-scroll), every other track lane).
+- **Click/drag on the ruler** scrubs the playhead to that beat (snapped).
+- **Loop markers** — draggable start/end handles on the ruler, grid-snapped,
+  with the region between them rendered as a highlighted band. This requires
+  `loopStart`/`loopEnd` beat fields on `EditorState` in addition to the
+  existing `totalBeats`/`loopEnabled` (today's implementation loops the full
+  `totalBeats` span with no adjustable in/out points — see Data Model below).
+- **Rewind** (transport control) returns the playhead to `loopStart` if
+  `loopEnabled`, otherwise to beat 0 — distinct from Stop, which halts
+  playback in addition to resetting position.
+
 ### Piano Keys — left column, `position: sticky; left: 0`
 
 - Displays the MIDI range **C2–B7** (72 rows) from top (highest) to bottom (lowest).
@@ -131,7 +148,7 @@ interface SynthSettings {
 | Bar line  | Every 4 beats | `#3a3a60` |
 | Beat line | Every 1 beat  | `#262640` |
 
-**Note interactions**
+**Note interactions — desktop (mouse), `'draw'` grid mode**
 
 | Gesture                          | Result                                                        |
 | -------------------------------- | ------------------------------------------------------------- |
@@ -139,6 +156,30 @@ interface SynthSettings {
 | Drag note body                   | Move note (pitch + time, snapped)                             |
 | Drag note right edge (last 8 px) | Resize duration (snapped, ≥ 1 snap unit)                      |
 | Right-click note                 | Delete note                                                   |
+| Double-click note                 | Opens the [note inspector](./editing-model.md#note-inspector-precise-numeric-entry) for exact pitch/start/duration/velocity entry |
+
+**Note interactions — touch, `'draw'` grid mode**
+
+Right-click has no touch equivalent, so touch needs its own affordances rather
+than silently losing delete/inspect functionality:
+
+| Gesture                    | Result                                                                 |
+| --------------------------- | ------------------------------------------------------------------------ |
+| Tap empty cell              | Create note at snapped position (default length, no drag-to-size)        |
+| Tap existing note           | Delete note                                                              |
+| Drag note body              | Move note (pitch + time, snapped)                                       |
+| Drag note right edge        | Resize duration                                                          |
+| Long-press note             | Opens the [note inspector](./editing-model.md#note-inspector-precise-numeric-entry) bottom sheet: pitch/start/duration/velocity fields, plus duplicate and delete |
+| Pinch (two-finger)          | Zoom the grid (adjusts `pixelsPerBeat`/`rowHeight` together)             |
+| One-finger drag, empty space | Pans the grid (does **not** create a note — see mode note below)       |
+
+Tap-to-delete and one-finger-pan-to-scroll both claim "drag/tap on empty
+space," which only works because `'draw'` mode treats a stationary tap as
+create/delete and a moving drag as pan — the same disambiguation
+[selection.md](./selection.md#mode-based-interaction-semantics) uses between
+`'draw'` and `'select'` grid modes for lasso vs. note-creation. See that
+document for the full mode/gesture matrix, including `'select'` mode's lasso
+and toggle-select behavior.
 
 **Playhead** — 2 px vertical line tracking `currentBeat`; the scroll container
 auto-scrolls to keep the playhead visible.
@@ -146,59 +187,42 @@ auto-scrolls to keep the playhead visible.
 **Velocity lane** — shown when `showVelocity` is `true`; bar chart below the note
 grid; drag bars to set per-note velocity (planned).
 
-### Synth Panel — right column, fixed width 220 px
+### Synth Panel — responsive "Sound drawer"
 
 | Section    | Controls                                            |
 | ---------- | --------------------------------------------------- |
 | Preset     | Dropdown of named presets stored in component state |
-| Waveform   | Dropdown: Sine / Square / Sawtooth / Triangle       |
+| Instrument | Dropdown: **Piano** (sampled, default) / Sine / Square / Sawtooth / Triangle — see [libraries.md](./libraries.md#sampled-piano-as-the-primary-instrument) |
 | Volume     | Range slider 0–100 %                                |
 | Tempo      | Range slider 40–240 BPM                             |
 | Envelope ▾ | Attack / Decay / Sustain / Release sliders          |
 | Filter ▾   | Enable toggle + Cutoff (Hz) + Resonance sliders     |
-| Effects ▾  | Reserved (reverb / delay — future work)             |
+| Effects ▾  | Reserved (reverb / delay — see [libraries.md](./libraries.md#tonejs--adopt-but-its-a-rewrite-not-just-an-addition)) |
+
+Layout is responsive, same fixed-column-vs-overlay split as the ribbon's
+[parameter drawer](./ribbon.md#parameter-drawer):
+
+- **Desktop**: fixed right column, 220px, always visible.
+- **Tablet/mobile**: collapsed by default, opened as a right-side slide-over
+  via a dedicated Sound-drawer button in the [top bar](./ribbon.md#top-bar).
+
+### Default viewport zoom
+
+The underlying pitch range stays C2–B7 (72 rows) regardless of device — only
+the *default visible window* differs: desktop opens showing more of the
+range at once, while mobile defaults to roughly 2 octaves visible (scrolling
+for the rest), matching its narrower vertical viewport. This is a default
+`rowHeight`/scroll-position choice, not a change to the data range.
 
 ---
 
-## Audio Engine (`audio.ts`)
+## Audio and export
 
-### AudioContext
-
-One shared `AudioContext` created lazily on first interaction.
-
-### Playback scheduler
-
-- `setInterval` at **25 ms** intervals.
-- On each tick, schedules all notes within the next **100 ms** lookahead window.
-- Each note: `OscillatorNode → (optional BiquadFilterNode) → GainNode → destination`.
-- Applies **ADSR envelope** via `GainNode.gain` `AudioParam` automation.
-- Tracks scheduled notes by `noteId:loopIteration` key to prevent double-scheduling.
-- A `requestAnimationFrame` loop updates `currentBeat` for smooth playhead animation.
-
-### Loop handling
-
-When `loopEnabled` is `true`, the scheduler calculates the loop iteration for each
-note and schedules it accordingly; the playhead wraps at `totalBeats`.
-
-### Frequency mapping
-
-$$f = 440 \times 2^{(\text{midiNote} - 69) \,/\, 12}$$
-
-### Audition (key click)
-
-Triggers a 500 ms note at the clicked pitch, using current synth settings.
-
----
-
-## MIDI Export (`midi-export.ts`)
-
-Generates a **MIDI type-0** file entirely in-browser:
-
-- **Resolution**: 480 ticks per quarter note.
-- **Tempo event**: derived from current BPM.
-- **Note On / Note Off** pairs sorted by absolute tick.
-- **Channel**: 0.
-- Delivered as a `Blob` download (`track.mid`).
+Audio synthesis (`audio.ts`) and MIDI export (`midi-export.ts`) are decomposed
+into their own document — [audio-engine.md](./audio-engine.md) — since
+[libraries.md](./libraries.md)'s Tone.js migration rewrites the former
+entirely, and [persistence.md](./persistence.md) needed its own place to
+describe project-file export/import without piling more onto this file.
 
 ---
 
@@ -239,11 +263,17 @@ Generates a **MIDI type-0** file entirely in-browser:
 
 ## Future Work
 
-- Web MIDI API recording from physical keyboard/controller
-- Multi-track sequencing (multiple piano roll lanes)
-- Undo/redo history
-- Note selection and bulk operations (transpose, quantise, humanise)
-- Velocity lane editing
-- Reverb and delay effects nodes
-- Chord voicing helper
-- Scale/key highlighting on piano keys and grid rows
+Several items originally listed here now have their own full specs rather
+than being open future work — listed for traceability, not as remaining gaps:
+undo/redo → [command-history.md](./command-history.md); selection and bulk
+transform operations → [selection.md](./selection.md) and
+[transformations.md](./transformations.md); reverb/delay and a real piano
+sound → [libraries.md](./libraries.md); scale-aware highlighting →
+[tracks.md](./tracks.md). What's left, still genuinely open:
+
+- Web MIDI API recording from a physical keyboard/controller
+- Multi-track sequencing (multiple piano-roll lanes) — see
+  [state-ownership.md](./state-ownership.md) for why this is deferred rather
+  than designed now
+- Velocity lane editing beyond single-note drag (batch/ramp editing) — see
+  [editing-model.md](./editing-model.md#future-work)
