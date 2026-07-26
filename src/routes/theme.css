@@ -1,0 +1,27 @@
+@theme {
+	/* Surfaces */
+	--color-surface: #1a1a2e;
+	--color-surface-raised: #232342;
+
+	/* Actions */
+	--color-accent: #7c5cff;
+	--color-danger: #ef4444;
+
+	/* Piano roll / tracks */
+	--color-scale-degree: #38bdf8;
+	--color-loop-band: rgb(124 92 255 / 0.25);
+
+	/* Arranger section palette, cycled by creation order */
+	--color-section-1: #f87171;
+	--color-section-2: #fb923c;
+	--color-section-3: #fbbf24;
+	--color-section-4: #4ade80;
+	--color-section-5: #2dd4bf;
+	--color-section-6: #818cf8;
+	--color-section-7: #f472b6;
+	--color-section-8: #a3a3a3;
+
+	/* Music-specific sizing */
+	--piano-key-height: 24px;
+	--ribbon-height: 96px;
+}

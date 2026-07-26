@@ -1,3 +1,4 @@
+@import './theme.css';
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
@@ -8,5 +9,5 @@ body {
 	padding: 0;
 	height: 100%;
 	overflow: hidden;
-	background: #1a1a2e;
+	background: var(--color-surface);
 }
