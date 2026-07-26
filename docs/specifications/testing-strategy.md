@@ -112,6 +112,15 @@ depends on real browser mechanics (viewport size, focus order, IndexedDB):
   drawer/palette and restores focus to the invoking control — this is
   *behavioral* accessibility that a static per-component a11y scan can't
   catch, since it's about an interaction sequence, not one rendered state
+- Mobile piano-roll touch flow, at a mobile viewport with touch emulation:
+  tap-to-create and tap-to-delete on an existing note, the tap-vs-drag
+  threshold that disambiguates a stationary tap from a pan
+  ([piano-roll.md](./piano-roll.md#note-grid--main-scrollable-canvas)),
+  long-press opening the note inspector bottom sheet (and cancelling the
+  pending tap-to-delete, not double-firing both), pinch-to-zoom adjusting
+  `pixelsPerBeat`/`rowHeight`, and one-finger pan on empty space —
+  explicitly asserting panning does **not** create a note, since that's the
+  exact ambiguity the `'draw'`-mode gesture disambiguation exists to resolve
 
 ### Full-page accessibility scans
 

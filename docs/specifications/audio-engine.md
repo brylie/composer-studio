@@ -44,8 +44,14 @@ each note and schedules it accordingly; the playhead wraps at `totalBeats`
 today, with no adjustable in/out points. `loopStart`/`loopEnd` are a planned
 Ruler feature ([piano-roll.md](./piano-roll.md#ruler)) — they don't exist on
 `EditorState`/`store.svelte.ts` yet, so there's nothing for the scheduler to
-read even once it's updated; both the data fields and the scheduler change
-land together as one piece of future work, not two.
+read even once it's updated. Two more pieces land alongside the store
+fields, all as one change: `audio.ts`'s `PlaybackOptions` interface — which
+today only exposes `getTotalBeats`/`getLoopEnabled` — needs
+`getLoopStart`/`getLoopEnd` getters added, and the scheduler's own loop
+math (`minLoop`/`maxLoop`, `noteBeat = note.startBeat + loop * totalBeats`)
+needs to wrap within `[loopStart, loopEnd)` instead of `[0, totalBeats)`.
+Three sub-pieces, not one — store fields, options contract, scheduler math
+— none of which is meaningful without the other two.
 
 ### Frequency mapping
 

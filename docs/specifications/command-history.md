@@ -74,7 +74,15 @@ class CommandHistory {
 	canUndo = $derived(this.#undoStack.length > 0);
 	canRedo = $derived(this.#redoStack.length > 0);
 
-	// call BEFORE mutating, with a human-readable label for the action about to happen
+	// call BEFORE mutating, with a human-readable label for the action about to happen.
+	// `snapshot` MUST return plain data — e.g. `() => ({ notes: $state.snapshot(store.notes) })` —
+	// not a live `$state` proxy read directly (`() => ({ notes: store.notes })`).
+	// `structuredClone` throws `DataCloneError` on a raw Svelte state proxy;
+	// `$state.snapshot()` is what turns reactive state into the plain,
+	// already-independent value structuredClone can actually work with. This
+	// is the caller's responsibility, not something `record()` can detect or
+	// fix on its own — it has no way to tell a proxy from a plain object
+	// short of the clone already failing.
 	record(label: string, snapshot: () => Omit<DocumentSnapshot, 'label'>) {
 		// label comes from the parameter, not from whatever (if anything) the
 		// snapshot callback's own return value happens to carry — there's
@@ -86,6 +94,7 @@ class CommandHistory {
 		if (this.#undoStack.length > this.#maxDepth) this.#undoStack.shift();
 	}
 
+	// `current` has the same plain-data contract as `snapshot` above.
 	undo(current: () => Omit<DocumentSnapshot, 'label'>): DocumentSnapshot | undefined {
 		const entry = this.#undoStack.pop();
 		if (!entry) return;

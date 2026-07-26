@@ -151,14 +151,30 @@ the deduplicated set of layers among the selected notes, in stack order,
 so a consumer can answer "how many distinct voices are in this selection"
 (`activeLayers.length`) or render one swatch per represented layer.
 
-Layer visibility/lock gate **selection eligibility at the interaction
-layer**, not inside `SelectionContext` itself — the same division of
-responsibility as scale membership being computed for display rather than
-enforced. Marquee-select and click only ever hit-test notes on visible,
-unlocked layers (per the table above); by the time notes reach
-`selectionContext`, that filtering has already happened, so `activeLayers`
-never contains a locked or hidden layer as a side effect of how selection
-was made, not a rule this module enforces separately.
+Layer visibility/lock gate selection at two points, not one: marquee-select
+and click only ever hit-test notes on visible, unlocked layers *when a
+selection is being made* (per the table above) — but `selectionContext` is
+a live `$derived.by` ([selection.md](./selection.md#selectioncontext--what-transformations-actually-read)),
+recomputed continuously, not just at the moment of the click. If a note was
+selected while its layer was visible and unlocked, and the user then locks
+or hides that layer *without changing the selection*, the eligibility
+filter has to be part of the derivation itself, or the stale note would
+still count toward `selectionContext.notes`/`activeLayers` even though it's
+no longer interactable:
+
+```typescript
+const notes = store.notes.filter(
+	(n) => selectedNoteIds.has(n.id) && isLayerSelectable(layerFor(n.layerId))
+);
+```
+
+`selectedNoteIds` itself is left untouched by a layer-state change — it
+still records "what was clicked." Locking or hiding a layer just makes its
+notes drop out of the *effective* selection (so a transform run right after
+only touches what's actually eligible); unlocking or re-showing the layer
+brings them back into `selectionContext` automatically, with no separate
+reconciliation step needed, since it's the same reactive filter running
+again on the same underlying set.
 
 ### Clipboard: preserve layer membership across copy/paste
 

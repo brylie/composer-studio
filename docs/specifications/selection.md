@@ -60,11 +60,31 @@ Shift-click range-select needs to remember where a selection gesture started:
 
 ```typescript
 interface SelectionAnchor {
-	noteId: string;
-	// index into the time-then-pitch sorted note order at the moment
-	// the anchor was set, so a later shift-click can select the range between them
+	noteId: string; // looked up in the *current* sorted note order at use-time — see below
 }
 ```
+
+A range selection needs two endpoints — the anchor above (where the gesture
+started) and a **focus**: whichever note the user just shift-clicked, ending
+the range. Focus isn't its own stored field; it's simply the note passed
+directly into the range-selection function at the moment of the shift-click
+— there's nothing to persist between gestures the way the anchor is.
+
+```typescript
+function selectRange(anchor: SelectionAnchor, focusNoteId: string, sortedNotes: Note[]) {
+	const anchorIndex = sortedNotes.findIndex((n) => n.id === anchor.noteId);
+	const focusIndex = sortedNotes.findIndex((n) => n.id === focusNoteId);
+	// select every note between the two indices, inclusive, regardless of order
+}
+```
+
+Deliberately **not** a cached index captured when the anchor was set: notes
+can be added, removed, or reordered (a new note inserted earlier in beat
+order) between setting the anchor and the eventual shift-click, which would
+silently invalidate a stale cached index. Re-deriving both indices from the
+current sorted array at the moment a range is actually computed means a
+stale anchor can't exist — the anchor is just "which note," resolved fresh
+against whatever order exists right now.
 
 ### SelectionContext — what transformations actually read
 
@@ -193,9 +213,17 @@ that.
 | Click a note                      | Replace selection with that note                               | Exists                |
 | Ctrl/Cmd+click a note              | Toggle that note in/out of selection                            | Exists                |
 | Shift+click a note                 | Select the range between the anchor and the clicked note        | New                    |
-| Drag on empty grid space           | Marquee (bounding-box) select — rectangle intersect vs. note rects in beat/pitch space | New |
+| Drag on empty grid space, in `'select'` mode (or ctrl/shift+drag in `'draw'` mode) | Marquee (bounding-box) select — rectangle intersect vs. note rects in beat/pitch space | New |
 | Ctrl/Cmd+A                          | Select all — visible, unlocked layers only (see [layers.md](./layers.md)) | Exists |
-| Escape / click empty space         | Deselect all                                                   | Exists (click only)   |
+| Escape                              | Deselect all, unconditionally, regardless of mode              | Exists                |
+| Click empty space, in `'select'` mode | Deselect all (the zero-size-lasso case)                       | New                    |
+
+Click/drag on empty space is **not** unconditional the way Escape is — in
+`'draw'` mode (the default) both gestures mean "create a note" instead, per
+[Mode-based interaction semantics](#mode-based-interaction-semantics) below.
+This table lists the `'select'`-mode behavior for those two rows; see that
+section for the full mode/platform matrix rather than treating this table as
+mode-agnostic.
 
 ### Marquee selection
 

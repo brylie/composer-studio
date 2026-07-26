@@ -100,6 +100,8 @@ needs correct *notes*. A synth-based piano is enough to judge that, and adds
 zero new external dependencies beyond Tone.js itself:
 
 ```typescript
+const filter = new Tone.Filter({ frequency: 4000, Q: 1, type: 'lowpass' });
+
 const piano = new Tone.PolySynth(Tone.Synth, {
 	oscillator: { type: 'triangle' }, // closer to piano harmonic content than a sine
 	envelope: {
@@ -108,7 +110,9 @@ const piano = new Tone.PolySynth(Tone.Synth, {
 		sustain: 0.3,
 		release: 1
 	}
-}).toDestination();
+}).connect(filter);
+
+filter.toDestination();
 
 piano.triggerAttackRelease(['C4', 'E4', 'G4'], '8n'); // chords: pass an array of notes
 piano.triggerAttackRelease('C5', '4n');
@@ -120,15 +124,28 @@ piano.triggerAttackRelease('C5', '4n');
   chord under the fingers) just works — `triggerAttackRelease` accepts an
   array of notes directly. This was already the plan per the table above;
   nothing about deferring sampling changes it.
+- **The filter is post-synth (one shared `Tone.Filter`), not per-voice.**
+  `Tone.Synth` — unlike `Tone.MonoSynth` — has no built-in filter or filter
+  envelope, so it has to be wired explicitly rather than assumed. A single
+  filter connected after the whole `PolySynth` matches what the Sound
+  drawer's Filter section already implies: one shared Cutoff/Resonance
+  pair, not a per-note filter envelope. `frequency` maps to Cutoff (Hz),
+  `Q` to Resonance, and the drawer's Enable toggle simply toggles the
+  `piano → filter → destination` chain versus `piano → destination`
+  directly. A genuinely per-voice filter (independent filter envelope per
+  note, closer to a real piano's attack-dependent brightness) would mean
+  swapping the voice type to `Tone.MonoSynth`, which does have one built
+  in — a reasonable future refinement, not needed for the MVP's single
+  shared Cutoff/Resonance control surface.
 - **Instrument selector**: the Sound drawer's Waveform dropdown becomes an
   **Instrument** selector, but for MVP its only entry is this "Piano"
   `PolySynth` preset alongside the existing Sine/Square/Sawtooth/Triangle
   raw-oscillator options, per
   [piano-roll.md](./piano-roll.md#synth-panel--responsive-sound-drawer) —
   no "sampled" entry yet. Envelope/Filter controls apply to it the same way
-  they already apply to the other oscillator-based options; there's no
-  reduced-scope carve-out to design since nothing here has its own
-  hardcoded timbre to protect.
+  they already apply to the other oscillator-based options, via the shared
+  post-synth filter above; there's no reduced-scope carve-out to design
+  since nothing here has its own hardcoded timbre to protect.
 - **Per-layer, once layers exist**: this instrument selector is described
   above as document-wide because that's the current (and v1) scope. Once
   [layers.md](./layers.md) lands, each layer gets its own instrument

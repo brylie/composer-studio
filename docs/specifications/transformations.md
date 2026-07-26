@@ -45,7 +45,19 @@ interface CommandDescriptor<TParams extends Record<string, unknown> = Record<str
 	shortcut?: string;
 	params?: ParamField[]; // omitted = one-click command, no drawer
 	isApplicable(ctx: CommandContext): boolean;
-	run(ctx: CommandContext, params: TParams): { notes: Note[]; label: string };
+	// Only consulted when isApplicable(ctx) is false, to drive the disabled
+	// tooltip (e.g. "Select at least 2 notes"). Separate from isApplicable
+	// rather than folded into a richer return type so every existing
+	// `ctx.count >= 1`-style boolean rule stays exactly as terse as written
+	// below — most commands' disabled state is self-explanatory from their
+	// label plus the ribbon's own selection-count display, and can skip
+	// this; a generic labelKey (e.g. "Not available for this selection")
+	// is the fallback when a command omits it.
+	getDisabledReasonKey?(ctx: CommandContext): string;
+	// Exactly one of `run` or `effect` — see "Export commands are effects,
+	// not transforms" below for why file I/O can't go through `run()`.
+	run?(ctx: CommandContext, params: TParams): { notes: Note[]; label: string };
+	effect?(ctx: CommandContext, params: TParams): Promise<void>;
 }
 ```
 
@@ -164,7 +176,11 @@ selection at all, they need an insertion point. Examples:
 When a command is disabled, both the ribbon button and the palette row stay
 visible but greyed out with a reason (e.g. "Select at least 2 notes") rather
 than disappearing — discoverability over minimalism, and it's what makes the
-palette useful as a way to *learn* what's possible.
+palette useful as a way to *learn* what's possible. The reason text comes
+from `CommandDescriptor.getDisabledReasonKey(ctx)` above, not from
+`isApplicable` itself — a boolean alone has no channel to carry a specific
+explanation, and most commands can rely on the generic fallback rather than
+writing their own.
 
 ---
 
@@ -201,7 +217,7 @@ of scope for this document and happens per-command as it's implemented.
 | `euclidean-rhythm` | `steps: number`, `pulses: number`, `rotation: number` |
 | `motif-generate` | `lengthBeats: number`, `seed: number` |
 | `ostinato-generate` | `lengthBeats: number`, `repeats: number` |
-| `generate-chords` | `octaveRange: { min, max }`, `voiceCount: number`, `voicingStrategy: 'closed' \| 'open' \| 'drop2' \| 'smooth-voice-leading'`, `source: 'chord-track' \| 'selection-derived'` |
+| `generate-chords` | `octaveRange: { min, max }`, `voiceCount: number`, `voicingStrategy: 'closed' \| 'open' \| 'drop2' \| 'smooth-voice-leading'`, `source: 'chord-track' \| 'selection-derived'`, `targetRange?: { min: number; max: number }` (beats — required for `source: 'chord-track'`; ignored for `'selection-derived'`, which uses the selection's own range) |
 
 #### `generate-chords` is the priority v1 case
 
@@ -214,17 +230,24 @@ Concretely, per `run()`'s whole-document contract above, this means
 — every existing note, melody or otherwise, is carried through unchanged,
 and the only additions are the newly voiced chord notes. Two source modes:
 
-- `source: 'chord-track'` — reads the active `ChordEvent` at each beat in the
-  target range from `ctx.chordTrack` (see `CommandContext` above), the
-  [chord track](./tracks.md#chord-track-placeholder)'s full contents, resolved
-  via [timeline.md](./timeline.md#resolving-the-active-value-at-beat-x)'s
+- `source: 'chord-track'` — reads the active `ChordEvent` at each beat in
+  `params.targetRange` from `ctx.chordTrack` (see `CommandContext` above),
+  the [chord track](./tracks.md#chord-track-placeholder)'s full contents,
+  resolved via [timeline.md](./timeline.md#resolving-the-active-value-at-beat-x)'s
   `activeEventAt`, takes its `pitchClasses` (not the `quality` label — see
   [tracks.md](./tracks.md#chordevent-carries-a-pitch-class-set-not-just-a-label)),
   and voices those pitch classes within `octaveRange`, smoothing voice
-  movement between consecutive chords per `voicingStrategy`.
+  movement between consecutive chords per `voicingStrategy`. `targetRange`
+  is required here specifically because this mode's whole point is running
+  with no melody selected — there's no `ctx.beatRange` to fall back on, so
+  the range has to come from the drawer as an explicit param (rendered via
+  the same `'number-range'` `ParamField` kind as `octaveRange`), defaulting
+  to a sensible span from the current `ctx.playhead` if the user hasn't set
+  one.
 - `source: 'selection-derived'` — no chord track yet: infer a chord per beat
-  from whatever melody notes are selected in that range (a much rougher
-  harmonization heuristic), then voice it the same way. Useful before the
+  from whatever melody notes are selected, using `ctx.beatRange` as the
+  target range (`targetRange` is ignored in this mode — the selection
+  already defines the span), then voice it the same way. Useful before the
   chord track exists, and worth keeping even after, for a quick "harmonize
   this melody" pass.
 
@@ -248,9 +271,42 @@ without special-casing.
 | `export-project` | — writes the full round-trippable project file, see [persistence.md](./persistence.md) |
 | `import-project` | — opens a file picker; confirms before discarding unsaved changes, see [persistence.md](./persistence.md) |
 
+#### Export commands are effects, not transforms
+
+All three use `effect()`, not `run()` — none of them fit "compute a
+replacement `Note[]`," and forcing them to would mean either faking a
+no-op notes return just to trigger a file download (a side effect,
+violating [architecture.md](./architecture.md#four-layers-named-the-svelte-idiomatic-way)'s
+"`run()` doesn't touch the DOM" rule) or trying to express an async file
+picker and a whole-document replace as a synchronous notes computation,
+which it isn't:
+
+- `export-midi`/`export-project` never mutate the document at all — they
+  read the current state and produce a file download. `effect()` does
+  exactly that and returns; no `history.record()` call, since nothing
+  about the document changed.
+- `import-project` does replace the document, but not through the
+  `run()`/`{ notes, label }` shape — it's a whole-`ProjectFile` swap (every
+  track, `synthSettings`, not just `notes`), gated behind the async file
+  picker, [persistence.md](./persistence.md#export--import-the-sharing-mechanism)'s
+  validation/migration, and its confirm-before-discard and
+  [flush-before-replace](./persistence.md#flush-before-any-document-replacing-action)
+  steps. Its `effect()` is responsible for calling `history.record()`
+  itself once the new document is ready to swap in — reusing
+  `CommandHistory`'s existing "restore the whole snapshot" undo model
+  (it's already generalized past just `Note[]`), just triggered from an
+  effect instead of the standard run-then-record-then-apply flow below.
+
 ---
 
 ## Execution flow
+
+This section describes `run()`-based commands (transform/generate) — the
+common case. `effect()`-based commands (the three Export commands above)
+skip this entirely: clicking calls `effect(ctx, {})` (or with drawer values,
+for a parameterized effect) directly, and whatever history interaction is
+appropriate, if any, happens inside that call rather than through the
+steps below.
 
 1. **One-click command** (no `params`): clicking the ribbon button or palette
    row calls `command.run(ctx, {})` immediately. `run()` is pure — per

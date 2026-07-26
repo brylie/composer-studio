@@ -121,12 +121,15 @@ early as Phase 1 in practice (see Parallelization).
 [libraries.md](./libraries.md) (Tone.js), rewriting [audio-engine.md](./audio-engine.md).
 
 Audio quality, not core logic — nothing in Phases 1–4 depends on which audio
-engine is underneath. Positioned here because it's a genuine rewrite of
-already-working `audio.ts`, not an addition, so it's worth doing once (after
-the Sound drawer's shape is stable from Phase 3) rather than touching
-`audio.ts` twice. This is also the most isolated, most parallelizable chunk
-of work in the whole roadmap — see below. Ships with the `Tone.PolySynth`
-default piano from [libraries.md](./libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth),
+engine is underneath. Splits into two dependency-distinct pieces: the
+`Tone.Transport`/`PolySynth`/scheduler core (per
+[libraries.md](./libraries.md#tonejs--adopt-but-its-a-rewrite-not-just-an-addition))
+has no dependency on the ribbon or Sound drawer at all and can start as
+early as Phase 1 in practice; **wiring the Sound drawer's Instrument/Volume/
+Envelope/Filter controls to that engine** is what should wait for Phase 3's
+Sound drawer shape to be stable, so that wiring isn't done twice against a
+moving UI target. Ships with the `Tone.PolySynth` default piano from
+[libraries.md](./libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth),
 not sampled instruments — those are real future work, deliberately kept off
 this roadmap until the baseline UX above it is proven out.
 
@@ -213,9 +216,12 @@ interface to develop concurrently rather than sequentially:
 - **Phase 4 (persistence) ‖ almost anything** — its only dependency is "the
   document shape so far," and it doesn't gate any other phase. Good
   standalone track for whoever isn't on the critical path at any given time.
-- **Phase 5 (Tone.js/`PolySynth` piano) ‖ Phases 2–4** — fully isolated from the
-  selection/history/transform/persistence work; touches only `audio.ts` and
-  the Sound drawer.
+- **Phase 5's engine core (Tone.js/`PolySynth`) ‖ Phases 1–4** — the
+  `Transport`/scheduler/synth rewrite itself is fully isolated from the
+  selection/history/transform/persistence work and touches only `audio.ts`,
+  not the Sound drawer, so it doesn't need to wait on Phase 3. Only the
+  later step of wiring Sound drawer controls to that engine has a real
+  Phase 3 dependency, per Phase 5's own description above.
 
 ---
 

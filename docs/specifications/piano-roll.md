@@ -114,14 +114,22 @@ interface SynthSettings {
   horizontal scroll/zoom as the grid body (and, per
   [timeline.md](./timeline.md#synced-scroll), every other track lane).
 - **Click/drag on the ruler** scrubs the playhead to that beat (snapped).
-- **Loop markers** — draggable start/end handles on the ruler, grid-snapped,
-  with the region between them rendered as a highlighted band. This requires
-  `loopStart`/`loopEnd` beat fields on `EditorState` in addition to the
-  existing `totalBeats`/`loopEnabled` (today's implementation loops the full
-  `totalBeats` span with no adjustable in/out points — see Data Model below).
-- **Rewind** (transport control) returns the playhead to `loopStart` if
-  `loopEnabled`, otherwise to beat 0 — distinct from Stop, which halts
-  playback in addition to resetting position.
+- **Loop markers** (planned, not yet implemented) — draggable start/end
+  handles on the ruler, grid-snapped, with the region between them rendered
+  as a highlighted band. This requires `loopStart`/`loopEnd` beat fields on
+  `EditorState` in addition to the existing `totalBeats`/`loopEnabled` (see
+  Data Model below) **and** new `getLoopStart`/`getLoopEnd` getters on
+  `audio.ts`'s `PlaybackOptions` — today that interface only exposes
+  `getTotalBeats`/`getLoopEnabled`, so the scheduler has no way to read a
+  loop region even once the store fields exist; both pieces land together
+  (see [audio-engine.md](./audio-engine.md#loop-handling)). Today's
+  implementation loops the full `totalBeats` span with no adjustable in/out
+  points.
+- **Rewind** (planned transport control, not in today's Toolbar at all —
+  only "Stop (square)" resets to beat 0, per Toolbar below) would return
+  the playhead to `loopStart` if `loopEnabled`, otherwise to beat 0 —
+  distinct from Stop, which halts playback in addition to resetting
+  position. Not buildable before `loopStart` exists.
 
 ### Piano Keys — left column, `position: sticky; left: 0`
 
@@ -173,6 +181,15 @@ than silently losing delete/inspect functionality:
 | Pinch (two-finger)          | Zoom the grid (adjusts `pixelsPerBeat`/`rowHeight` together)             |
 | One-finger drag, empty space | Pans the grid (does **not** create a note — see mode note below)       |
 
+Tap-to-delete and long-press-to-inspect are both gestures on an existing
+note, disambiguated by hold duration rather than by anything about the
+gesture's shape: crossing the long-press threshold (while the touch point
+hasn't moved past the drag threshold) fires the inspector and **cancels**
+the pending tap, so releasing afterward does not also delete the note.
+Released before the threshold, it's an ordinary tap and deletes as usual.
+Without this, a long-press would fire both handlers — opening the inspector
+on an already-deleted note.
+
 Tap-to-delete and one-finger-pan-to-scroll both claim "drag/tap on empty
 space," which only works because `'draw'` mode treats a stationary tap as
 create/delete and a moving drag as pan — the same disambiguation
@@ -196,6 +213,34 @@ grid; drag bars to set per-note velocity (planned).
 | Volume     | Range slider 0–100 %                                |
 | Tempo      | Range slider 40–240 BPM                             |
 | Envelope ▾ | Attack / Decay / Sustain / Release sliders          |
+
+**Ownership**: `selectedPreset` (the highlighted dropdown entry) is
+component-local `$state`, not part of `store.synthSettings` — it exists only
+to highlight which named bundle was last loaded, not to persist a "current
+preset" concept. `store.synthSettings` (`waveform`, `volume`, `envelope`,
+`filter`) is the actual document/session state every control ultimately
+reads from and writes to; loading a preset does `store.synthSettings =
+structuredClone(presetSettings)`, a full overwrite, same as any other
+mutation of that object. Nothing currently resets `selectedPreset` back to
+"none" when a slider is subsequently dragged, so the dropdown can show a
+preset name that no longer matches the live settings — pre-existing, worth
+fixing alongside whichever of these two changes lands first.
+
+**Preset "Piano" vs. Instrument "Piano" — a naming collision to resolve
+before the Instrument selector ships**: the existing preset list already
+has an entry named `'Piano'` (`waveform: 'triangle'`, plus its own
+envelope/filter values) — a plain oscillator bundle with no relation to
+Tone.js. Once the Instrument dropdown's own `Tone.PolySynth`-based "Piano"
+option exists, the two "Piano" labels would refer to genuinely different
+things (an oscillator preset vs. a different synth engine entirely), which
+is confusing regardless of how either is implemented. Resolution: **Preset
+stops setting `waveform`.** Once Instrument exists as the top-level choice
+of synth engine, Preset narrows to only setting `volume`/`envelope`/`filter`
+— a named character (warm, bright, plucky) layered on top of whichever
+Instrument is active — and the existing `'Piano'` preset is renamed to
+something that describes its envelope/filter character rather than an
+instrument name it no longer owns (e.g. `'Warm'`), so only the Instrument
+dropdown's entry is ever called "Piano."
 | Filter ▾   | Enable toggle + Cutoff (Hz) + Resonance sliders     |
 | Effects ▾  | Reserved (reverb / delay — see [libraries.md](./libraries.md#tonejs--adopt-but-its-a-rewrite-not-just-an-addition)) |
 

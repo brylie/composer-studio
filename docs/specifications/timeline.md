@@ -219,6 +219,9 @@ interface TimeSignatureEvent {
 	numerator: number;
 	denominator: number;
 }
+
+type TempoTrack = TempoEvent[];
+type TimeSignatureTrack = TimeSignatureEvent[];
 ```
 
 `id` matches `ScaleEvent`/`ChordEvent`/`LabelEvent` ([tracks.md](./tracks.md))
@@ -226,6 +229,17 @@ interface TimeSignatureEvent {
 marker needs a stable reference to it that survives the array being
 resorted or another event being inserted before it; an array index doesn't
 survive that, an `id` does.
+
+**Convention, stated once for every current and future track type:**
+concrete events (`TempoEvent`, `TimeSignatureEvent`, `ScaleEvent`,
+`ChordEvent`, `LabelEvent`) are always **complete types** — `id`, `beat`,
+and their own fields declared directly, not a separate payload type wrapped
+in `TimelineEvent<Payload>`. `TimelineEvent<TPayload>`/`EventTrack<TPayload>`
+above exist to describe the family's shared shape generically (what
+`activeEventAt` operates on), not as a type every concrete event must
+literally reference. `TempoTrack`/`TimeSignatureTrack` here match
+`ScaleTrack`/`ChordTrack`/`LabelTrack` in [tracks.md](./tracks.md) — every
+track type gets a named `XTrack = XEvent[]` alias, not just some of them.
 
 `store.svelte.ts`'s single `tempo: number` becomes the payload of the first
 `TempoEvent` at beat 0; a project with no further tempo events behaves exactly
