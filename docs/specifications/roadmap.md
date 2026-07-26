@@ -20,6 +20,7 @@ sequenced around what that actually requires versus what it doesn't.
 | [selection.md](./selection.md) | High — everything acts on a selection | Low (extends existing `store.svelte.ts`) | Nothing new | transformations.md |
 | [command-history.md](./command-history.md) | High — destructive edits need undo to be safe | Low (fixes/generalizes existing code) | Nothing new | transformations.md |
 | [editing-model.md](./editing-model.md) | High — every mutation, gesture or command, relies on this contract | Low (mostly formalizing existing `updateNote` behavior; the note inspector is the one new component) | Nothing new | transformations.md (clamping), persistence.md (valid data to save) |
+| [state-ownership.md](./state-ownership.md) | Medium — cheap now, a real migration if left until Application state modules multiply | Low (a root context provider + getters, done once) | Nothing new | Application state modules built in Phase 1 onward adopt the pattern from the start instead of retrofitting it |
 | [libraries.md](./libraries.md) — tonal.js | High — resolves real music-theory logic | Low (additive, no rewrite) | Nothing new | transformations.md (mode-shift, reharmonization, generate-chords), tracks.md |
 | [transformations.md](./transformations.md) | High — this is the product | Medium | selection.md, command-history.md, tonal.js | ribbon.md, command-palette.md |
 | [ribbon.md](./ribbon.md) | High — how any of this gets used | Medium (mostly responsive UI work) | transformations.md's `CommandDescriptor` *shape* (not every command implemented) | command-palette.md |
@@ -31,7 +32,7 @@ sequenced around what that actually requires versus what it doesn't.
 | [tracks.md](./tracks.md) — labels track | Low | Low | timeline.md | Nothing blocks on it |
 | [command-palette.md](./command-palette.md) | Low (already deferred) | Low once the registry exists | transformations.md | Nothing blocks on it |
 | [tracks.md](./tracks.md) — arranger track | Low for v1 (annotation-only) | Low for v1, high for content-carrying | timeline.md | Nothing blocks on it yet |
-| [testing-strategy.md](./testing-strategy.md), [accessibility.md](./accessibility.md), [performance.md](./performance.md), [state-ownership.md](./state-ownership.md) | Ongoing/reactive, not phase-gated — see below | — | — | — |
+| [testing-strategy.md](./testing-strategy.md), [accessibility.md](./accessibility.md), [performance.md](./performance.md) | Ongoing/reactive, not phase-gated — see below | — | — | — |
 
 The key finding: **`generate-chords` doesn't need the chord track.** It was
 specified with `source: 'selection-derived'` precisely so voice-led
@@ -61,15 +62,20 @@ hardcoding one-off colors instead of referencing named tokens.
 ### Phase 1 — Selection + History + Editing-model foundation
 
 [selection.md](./selection.md), [command-history.md](./command-history.md),
-[editing-model.md](./editing-model.md).
+[editing-model.md](./editing-model.md), [state-ownership.md](./state-ownership.md).
 
-Low complexity, no new external dependencies, and all three are hard blockers
-for every transform command's `isApplicable()`/`run()` and undo behavior.
-This is mechanical work extending `store.svelte.ts` — the `SvelteSet`
-migration, the `'draw'`/`'select'` mode matrix, marquee selection, clipboard,
-fixing the non-reactive undo-stack bug, and formalizing the mutation
-invariants (clamping, overlap policy, the note inspector). Nothing here
-requires a design decision that isn't already made.
+Low complexity, no new external dependencies, and all three specs are hard
+blockers for every transform command's `isApplicable()`/`run()` and undo
+behavior. This is mechanical work extending `store.svelte.ts` — the
+`SvelteSet` migration, the `'draw'`/`'select'` mode matrix, marquee
+selection, clipboard, fixing the non-reactive undo-stack bug, and
+formalizing the mutation invariants (clamping, overlap policy, the note
+inspector). This is also the natural point to do the one-time
+[state-ownership.md](./state-ownership.md) migration — moving `store` and
+the new `CommandHistory`/selection state behind a root context provider
+instead of bare module singletons — since these modules are being built out
+for real here rather than just extended. Nothing here requires a design
+decision that isn't already made.
 
 ### Phase 2 — tonal.js + the priority transform/generate commands
 
@@ -95,7 +101,9 @@ ribbon, and the shared bottom-sheet/side-drawer shell the parameter drawer
 needs (and which the Sound drawer and note inspector will also reuse once
 their own phases land). Medium complexity, mostly responsive-layout work,
 not deeply novel. **Only depends on the `CommandDescriptor` shape existing,
-not on every command being implemented** — see Parallelization below.
+not on every command being implemented** — see Parallelization below. Ribbon
+UI state (active tab, drawer open) is added to the same root context
+provider Phase 1 introduced, per [state-ownership.md](./state-ownership.md).
 
 ### Phase 4 — Persistence
 
@@ -170,9 +178,8 @@ this roadmap to a first step toward orchestration.
   phase's PRs; the 80% coverage gate is worth actually wiring up around the
   end of Phase 2, once the registry/history/selection logic it targets
   exists in volume.
-- **[performance.md](./performance.md)**, **[state-ownership.md](./state-ownership.md)**
-  — both explicitly trigger-condition-based (real lag observed; a second
-  simultaneous editor instance needed). Neither should be preemptively
+- **[performance.md](./performance.md)** — explicitly trigger-condition-based
+  (real lag observed, not a hypothetical). Shouldn't be preemptively
   addressed by this roadmap.
 
 ---

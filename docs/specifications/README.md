@@ -18,7 +18,7 @@ sequencing (what to build first and why), see [roadmap.md](./roadmap.md).
 | [tracks.md](./tracks.md) | Scale track (specified), chord and arranger tracks (placeholders) |
 | [command-palette.md](./command-palette.md) | Future milestone — searchable command palette over the same registry |
 | [accessibility.md](./accessibility.md) | Living cross-cutting standard referenced by all of the above |
-| [state-ownership.md](./state-ownership.md) | Singleton-module vs. Svelte-context trade-off, deferred until it's actually forced |
+| [state-ownership.md](./state-ownership.md) | Application state lives behind a root-provided Svelte context, not a bare module singleton — supports nested overrides for multi-instance and test isolation |
 | [libraries.md](./libraries.md) | tonal.js (music theory) and Tone.js (audio, incl. sampled piano) — what they replace, and the adoption cost of each |
 | [audio-engine.md](./audio-engine.md) | The current hand-rolled playback scheduler and MIDI export |
 | [design-tokens.md](./design-tokens.md) | Color/spacing tokens via Tailwind v4's `@theme`, and what other specs reference by name (scale highlight, loop band, section colors) |
@@ -35,8 +35,8 @@ voice-led chords) coexist as notes on that same timeline, distinguished only
 by pitch register and selection, not by separate tracks or instruments — this
 is deliberately simple and is what makes piano composition a good starting
 target. Orchestration (independent tracks per instrument, multiple
-simultaneous editors) is real future work, not a v1 concern, and is called out
-wherever it would otherwise force a premature decision (see
+simultaneous editors) is real future work, not a v1 concern — state
+ownership is already set up to support it without a later rewrite (see
 [state-ownership.md](./state-ownership.md)).
 
 ### Explicit non-goals (for now)

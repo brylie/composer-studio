@@ -138,6 +138,7 @@ how shortcut registration avoids colliding with browser/OS bindings.
 
 ## State ownership
 
-`CommandHistory` is a module-level singleton, matching `store.svelte.ts` — see
-[state-ownership.md](./state-ownership.md) for the full singleton-vs-context
-trade-off and why it's deferred rather than decided now.
+`CommandHistory` is created inside the root context provider alongside
+`store` and read via a getter, not imported as a bare module singleton — see
+[state-ownership.md](./state-ownership.md) for the root-provided-context
+pattern and why it replaced the singleton default.

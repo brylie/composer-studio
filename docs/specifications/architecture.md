@@ -5,8 +5,8 @@
 This answers "where does code live, and what's allowed to depend on what" —
 a question every other spec in this directory has been quietly assuming an
 answer to (the tonal.js adapter, the command registry's pure `run()`
-functions, the `.svelte.ts` singleton pattern) without ever stating the rule
-those choices have in common. It's a lightweight take on Clean Architecture's
+functions, `.svelte.ts` modules behind a root context provider) without ever
+stating the rule those choices have in common. It's a lightweight take on Clean Architecture's
 **dependency rule** — business logic shouldn't depend on frameworks, and
 should be trivially testable in isolation — expressed through Svelte's own
 idioms (which *file type* something is) rather than importing Clean
@@ -24,10 +24,7 @@ someday. None of that is true here: one persistence mechanism (IndexedDB, per
 composer-studio-shaped domain, built by two people. Full interface-based
 dependency inversion for every boundary would mean real boilerplate
 (interfaces + implementations + wiring) for a flexibility this project isn't
-going to use — the same "don't design for hypothetical future requirements"
-call this whole specs directory has made repeatedly (see, e.g.,
-[state-ownership.md](./state-ownership.md) deferring multi-instance support
-until it's actually needed). What's worth keeping is just the dependency
+going to use. What's worth keeping is just the dependency
 rule itself, because it's also exactly what makes code cheaply testable —
 and that's a real, current requirement, not a hypothetical one
 ([testing-strategy.md](./testing-strategy.md)'s 80% target is scoped to
@@ -48,7 +45,7 @@ language on top of the framework's own.
 | Layer | File type | Contains | May import |
 | --- | --- | --- | --- |
 | **Domain** | plain `.ts`, zero Svelte/DOM/browser-API imports | Types (`Note`, `ScaleEvent`, `ChordEvent`, ...), the tonal.js adapter, transform/generator `run()`/`isApplicable()`, timeline event resolution, editing invariants (clamp/snap/overlap) | Nothing in this app; may depend on a well-chosen external library (tonal.js) fully contained within its own adapter |
-| **Application state** | `.svelte.ts` singleton modules (per [state-ownership.md](./state-ownership.md)) | `store.svelte.ts`, selection state, `CommandHistory`, ribbon UI state | Domain, Infrastructure adapters |
+| **Application state** | `.svelte.ts` modules instantiated behind a root-provided Svelte context (per [state-ownership.md](./state-ownership.md)) | `store.svelte.ts`, selection state, `CommandHistory`, ribbon UI state | Domain, Infrastructure adapters |
 | **Infrastructure adapters** | plain `.ts`, each wraps one external/browser API | `audio.ts`/the Tone.js wrapper, `midi-export.ts`, the IndexedDB persistence module | Domain only |
 | **UI** | `.svelte` components | Everything currently in `src/lib/piano-roll/*.svelte`, the ribbon, drawers | Application state only |
 

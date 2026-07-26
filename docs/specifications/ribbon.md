@@ -206,10 +206,11 @@ icon-only button.
 ## State ownership
 
 Ribbon UI state (active tab, mobile collapsed/expanded, drawer open) is
-presentation-only and distinct from document state (`store.svelte.ts`). It's a
-module-level singleton `.svelte.ts` file, following the existing project
-convention — see [state-ownership.md](./state-ownership.md) for why that's the
-right call for now and what would change it.
+presentation-only and distinct from document state (`store.svelte.ts`). It's
+created inside the same root context provider as the rest of Application
+state and read via a getter, not a bare module singleton — see
+[state-ownership.md](./state-ownership.md) for the root-provided-context
+pattern this follows.
 
 ---
 

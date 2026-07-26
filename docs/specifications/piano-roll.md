@@ -272,8 +272,9 @@ sound → [libraries.md](./libraries.md); scale-aware highlighting →
 [tracks.md](./tracks.md). What's left, still genuinely open:
 
 - Web MIDI API recording from a physical keyboard/controller
-- Multi-track sequencing (multiple piano-roll lanes) — see
-  [state-ownership.md](./state-ownership.md) for why this is deferred rather
-  than designed now
+- Multi-track sequencing (multiple piano-roll lanes) — the state-ownership
+  model already supports one instance per lane (see
+  [state-ownership.md](./state-ownership.md)); what's still undesigned is the
+  UI/UX of multiple simultaneous piano-roll lanes itself
 - Velocity lane editing beyond single-note drag (batch/ramp editing) — see
   [editing-model.md](./editing-model.md#future-work)
