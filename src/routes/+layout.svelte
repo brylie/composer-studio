@@ -1,19 +1,23 @@
 <script lang="ts">
-	import type { Pathname } from '$app/types';
-	import { resolve } from '$app/paths';
-	import { page } from '$app/state';
-	import { locales, localizeHref } from '$lib/paraglide/runtime';
-	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+  import type { Snippet } from 'svelte';
+  import type { Pathname } from '$app/types';
+  import { resolve } from '$app/paths';
+  import { page } from '$app/state';
+  import { locales, localizeHref } from '$lib/paraglide/runtime';
+  import { provideEditorState } from '$lib/piano-roll/context.svelte.js';
+  import './layout.css';
+  import favicon from '$lib/assets/favicon.svg';
 
-	let { children } = $props();
+  provideEditorState();
+
+  let { children }: { children: Snippet } = $props();
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 {@render children()}
 
 <div class="hidden">
-	{#each locales as locale (locale)}
-		<a href={resolve(localizeHref(page.url.pathname, { locale }) as Pathname)}>{locale}</a>
-	{/each}
+  {#each locales as locale (locale)}
+    <a href={resolve(localizeHref(page.url.pathname, { locale }) as Pathname)}>{locale}</a>
+  {/each}
 </div>

@@ -1,219 +1,449 @@
-import type { Note, SynthSettings, SnapDenominator } from './types.js';
+import { SvelteSet } from 'svelte/reactivity';
+import { CommandHistory, isContiguous } from './history.js';
+import type {
+  ActiveScaleSegment,
+  ClipboardContents,
+  DocumentSnapshot,
+  GridInteractionMode,
+  Layer,
+  Note,
+  SelectionAnchor,
+  SelectionContext,
+  SnapDenominator,
+  SynthSettings,
+} from './types.js';
+import { MAX_MIDI, MIN_DURATION_BEATS, MIN_MIDI } from './types.js';
+
+export { CommandHistory, isContiguous };
 
 const DEFAULT_SYNTH: SynthSettings = {
-	waveform: 'triangle',
-	volume: 90,
-	envelope: { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 },
-	filter: { enabled: false, cutoff: 2000, resonance: 1 }
+  waveform: 'triangle',
+  volume: 90,
+  envelope: { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 },
+  filter: { enabled: false, cutoff: 2000, resonance: 1 },
 };
 
-function createStore() {
-	let notes: Note[] = $state([]);
-	let isPlaying = $state(false);
-	let isRecording = $state(false);
-	let currentBeat = $state(0);
-	let snapDenominator: SnapDenominator = $state(4);
-	let showVelocity = $state(false);
-	let loopEnabled = $state(true);
-	let totalBeats = $state(64); // 16 bars × 4 beats
-	let pixelsPerBeat = $state(80);
-	let rowHeight = $state(24);
-	let tempo = $state(122);
-	let synthSettings: SynthSettings = $state(structuredClone(DEFAULT_SYNTH));
-	let trackName = $state('Untitled Track');
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-	// Selection
-	let selectedNoteIds: string[] = $state([]);
-
-	// Undo / redo stacks (plain arrays, not reactive — only notes matter)
-	const undoStack: Note[][] = [];
-	const redoStack: Note[][] = [];
-
-	const snapBeats = $derived(4 / snapDenominator);
-
-	function addNote(note: Note) {
-		// Guard against duplicate IDs (defensive, UUIDs should be unique)
-		if (notes.some((n) => n.id === note.id)) return;
-		notes = [...notes, note];
-	}
-
-	function removeNote(id: string) {
-		notes = notes.filter((n) => n.id !== id);
-		selectedNoteIds = selectedNoteIds.filter((sid) => sid !== id);
-	}
-
-	function updateNote(id: string, updates: Partial<Note>) {
-		notes = notes.map((n) => (n.id === id ? { ...n, ...updates } : n));
-	}
-
-	function clearNotes() {
-		notes = [];
-		selectedNoteIds = [];
-	}
-
-	// ── Undo / Redo ──────────────────────────────────────────────────
-	function snapshotForUndo() {
-		undoStack.push(notes.map((n) => ({ ...n })));
-		redoStack.length = 0;
-		if (undoStack.length > 50) undoStack.shift();
-	}
-
-	function undo() {
-		if (undoStack.length === 0) return;
-		redoStack.push(notes.map((n) => ({ ...n })));
-		notes = undoStack.pop()!;
-		const ids = new Set(notes.map((n) => n.id));
-		selectedNoteIds = selectedNoteIds.filter((id) => ids.has(id));
-	}
-
-	function redo() {
-		if (redoStack.length === 0) return;
-		undoStack.push(notes.map((n) => ({ ...n })));
-		notes = redoStack.pop()!;
-		const ids = new Set(notes.map((n) => n.id));
-		selectedNoteIds = selectedNoteIds.filter((id) => ids.has(id));
-	}
-
-	// ── Selection ────────────────────────────────────────────────────
-	function selectNote(id: string, addToSelection: boolean) {
-		if (addToSelection) {
-			selectedNoteIds = selectedNoteIds.includes(id)
-				? selectedNoteIds.filter((sid) => sid !== id)
-				: [...selectedNoteIds, id];
-		} else {
-			selectedNoteIds = [id];
-		}
-	}
-
-	function selectAll() {
-		selectedNoteIds = notes.map((n) => n.id);
-	}
-
-	function deselectAll() {
-		selectedNoteIds = [];
-	}
-
-	function selectNotes(ids: string[], addToSelection: boolean) {
-		if (addToSelection) {
-			const existing = new Set(selectedNoteIds);
-			for (const id of ids) existing.add(id);
-			selectedNoteIds = Array.from(existing);
-		} else {
-			selectedNoteIds = [...ids];
-		}
-	}
-
-	function deleteSelected() {
-		if (selectedNoteIds.length === 0) return;
-		snapshotForUndo();
-		const toDelete = new Set(selectedNoteIds);
-		notes = notes.filter((n) => !toDelete.has(n.id));
-		selectedNoteIds = [];
-	}
-
-	return {
-		get notes() {
-			return notes;
-		},
-
-		get isPlaying() {
-			return isPlaying;
-		},
-		set isPlaying(v: boolean) {
-			isPlaying = v;
-		},
-
-		get isRecording() {
-			return isRecording;
-		},
-		set isRecording(v: boolean) {
-			isRecording = v;
-		},
-
-		get currentBeat() {
-			return currentBeat;
-		},
-		set currentBeat(v: number) {
-			currentBeat = v;
-		},
-
-		get snapDenominator() {
-			return snapDenominator;
-		},
-		set snapDenominator(v: SnapDenominator) {
-			snapDenominator = v;
-		},
-
-		get showVelocity() {
-			return showVelocity;
-		},
-		set showVelocity(v: boolean) {
-			showVelocity = v;
-		},
-
-		get loopEnabled() {
-			return loopEnabled;
-		},
-		set loopEnabled(v: boolean) {
-			loopEnabled = v;
-		},
-
-		get totalBeats() {
-			return totalBeats;
-		},
-		get pixelsPerBeat() {
-			return pixelsPerBeat;
-		},
-		set pixelsPerBeat(v: number) {
-			pixelsPerBeat = Math.max(20, Math.min(240, v));
-		},
-
-		get rowHeight() {
-			return rowHeight;
-		},
-
-		get tempo() {
-			return tempo;
-		},
-		set tempo(v: number) {
-			tempo = v;
-		},
-
-		get synthSettings() {
-			return synthSettings;
-		},
-		set synthSettings(v: SynthSettings) {
-			synthSettings = v;
-		},
-
-		get trackName() {
-			return trackName;
-		},
-		set trackName(v: string) {
-			trackName = v;
-		},
-
-		get snapBeats() {
-			return snapBeats;
-		},
-
-		get selectedNoteIds() {
-			return selectedNoteIds;
-		},
-
-		addNote,
-		removeNote,
-		updateNote,
-		clearNotes,
-		selectNote,
-		selectNotes,
-		selectAll,
-		deselectAll,
-		deleteSelected,
-		snapshotForUndo,
-		undo,
-		redo
-	};
+/** Enforce all Note field invariants. Every mutation goes through this. */
+function clampNote(note: Note): Note {
+  return {
+    ...note,
+    midiNote: Math.max(MIN_MIDI, Math.min(MAX_MIDI, Math.round(note.midiNote))),
+    startBeat: Math.max(0, note.startBeat),
+    durationBeats: Math.max(MIN_DURATION_BEATS, note.durationBeats),
+    velocity: Math.max(1, Math.min(127, Math.round(note.velocity))),
+  };
 }
 
-export const store = createStore();
+// ── Store factory ──────────────────────────────────────────────────────────────
+
+export function createStore() {
+  let notes: Note[] = $state([]);
+  let isPlaying = $state(false);
+  let isRecording = $state(false);
+  let currentBeat = $state(0);
+  let snapDenominator: SnapDenominator = $state(4);
+  let showVelocity = $state(false);
+  let loopEnabled = $state(true);
+  let totalBeats = $state(64); // 16 bars x 4 beats
+  let pixelsPerBeat = $state(80);
+  const rowHeight = $state(24);
+  let tempo = $state(122);
+  let synthSettings: SynthSettings = $state(structuredClone(DEFAULT_SYNTH));
+  let trackName = $state('Untitled Track');
+  let interactionMode: GridInteractionMode = $state('draw');
+
+  // Selection
+  const selectedNoteIds = new SvelteSet<string>();
+  let selectionAnchor: SelectionAnchor | null = $state(null);
+
+  // Clipboard
+  let clipboard: ClipboardContents | null = $state(null);
+
+  // History — core logic in plain TS; reactive mirrors keep UI in sync
+  const _history = new CommandHistory();
+  let _canUndo = $state(false);
+  let _canRedo = $state(false);
+  let _undoLabel = $state<string | undefined>(undefined);
+  let _redoLabel = $state<string | undefined>(undefined);
+
+  function syncHistory() {
+    _canUndo = _history.canUndo;
+    _canRedo = _history.canRedo;
+    _undoLabel = _history.undoLabel;
+    _redoLabel = _history.redoLabel;
+  }
+
+  const snapBeats = $derived(4 / snapDenominator);
+
+  // ── Derived SelectionContext ──────────────────────────────────────────────
+
+  const selectionContext = $derived.by((): SelectionContext => {
+    const selected = notes
+      .filter((n) => selectedNoteIds.has(n.id))
+      .sort((a, b) => a.startBeat - b.startBeat || a.midiNote - b.midiNote);
+
+    const count = selected.length;
+    let pitchRange: { min: number; max: number } | null = null;
+    let beatRange: { start: number; end: number } | null = null;
+
+    if (count > 0) {
+      let minPitch = Infinity,
+        maxPitch = -Infinity;
+      let minBeat = Infinity,
+        maxBeat = -Infinity;
+      for (const n of selected) {
+        if (n.midiNote < minPitch) minPitch = n.midiNote;
+        if (n.midiNote > maxPitch) maxPitch = n.midiNote;
+        if (n.startBeat < minBeat) minBeat = n.startBeat;
+        const end = n.startBeat + n.durationBeats;
+        if (end > maxBeat) maxBeat = end;
+      }
+      pitchRange = { min: minPitch, max: maxPitch };
+      beatRange = { start: minBeat, end: maxBeat };
+    }
+
+    return {
+      notes: selected,
+      count,
+      pitchRange,
+      beatRange,
+      isContiguous: isContiguous(selected),
+      activeScales: [] as ActiveScaleSegment[], // Phase 6 stub
+      activeLayers: [] as Layer[], // Phase 10 stub
+    };
+  });
+
+  // ── Internal helpers ──────────────────────────────────────────────────────
+
+  function extendTotalBeatsIfNeeded(note: Note) {
+    const noteEnd = note.startBeat + note.durationBeats;
+    if (noteEnd > totalBeats) {
+      totalBeats = Math.ceil(noteEnd / 4) * 4;
+    }
+  }
+
+  function currentSnapshot(): Omit<DocumentSnapshot, 'label'> {
+    return { notes: $state.snapshot(notes) };
+  }
+
+  function recordHistory(label: string) {
+    _history.record(label, currentSnapshot);
+    syncHistory();
+  }
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+
+  function addNote(note: Note) {
+    if (notes.some((n) => n.id === note.id)) return;
+    const clamped = clampNote(note);
+    notes = [...notes, clamped];
+    extendTotalBeatsIfNeeded(clamped);
+  }
+
+  function removeNote(id: string) {
+    notes = notes.filter((n) => n.id !== id);
+    selectedNoteIds.delete(id);
+  }
+
+  function updateNote(id: string, updates: Partial<Note>) {
+    notes = notes.map((n) => {
+      if (n.id !== id) return n;
+      const merged = clampNote({ ...n, ...updates });
+      extendTotalBeatsIfNeeded(merged);
+      return merged;
+    });
+  }
+
+  function clearNotes() {
+    notes = [];
+    selectedNoteIds.clear();
+  }
+
+  // ── Selection ─────────────────────────────────────────────────────────────
+
+  function selectNote(id: string, addToSelection: boolean) {
+    if (addToSelection) {
+      if (selectedNoteIds.has(id)) {
+        selectedNoteIds.delete(id);
+      } else {
+        selectedNoteIds.add(id);
+      }
+    } else {
+      selectedNoteIds.clear();
+      selectedNoteIds.add(id);
+    }
+  }
+
+  function selectAll() {
+    for (const n of notes) selectedNoteIds.add(n.id);
+  }
+
+  function deselectAll() {
+    selectedNoteIds.clear();
+    selectionAnchor = null;
+  }
+
+  function selectNotes(ids: string[], addToSelection: boolean) {
+    if (!addToSelection) selectedNoteIds.clear();
+    for (const id of ids) selectedNoteIds.add(id);
+  }
+
+  function setAnchor(noteId: string) {
+    selectionAnchor = { noteId };
+  }
+
+  function clearAnchor() {
+    selectionAnchor = null;
+  }
+
+  /**
+   * Range-selects from the current anchor to focusNoteId. Anchor index is
+   * re-derived at call-time from the current sorted note order so stale
+   * indices cannot exist. Falls back to single-select when no anchor is set.
+   */
+  function selectRange(focusNoteId: string) {
+    if (!selectionAnchor) {
+      selectedNoteIds.clear();
+      selectedNoteIds.add(focusNoteId);
+      return;
+    }
+    const anchor = selectionAnchor;
+    const sorted = notes
+      .slice()
+      .sort((a, b) => a.startBeat - b.startBeat || a.midiNote - b.midiNote);
+    const anchorIndex = sorted.findIndex((n) => n.id === anchor.noteId);
+    const focusIndex = sorted.findIndex((n) => n.id === focusNoteId);
+    if (anchorIndex === -1 || focusIndex === -1) return;
+    const lo = Math.min(anchorIndex, focusIndex);
+    const hi = Math.max(anchorIndex, focusIndex);
+    selectedNoteIds.clear();
+    for (let i = lo; i <= hi; i++) selectedNoteIds.add(sorted[i].id);
+  }
+
+  function deleteSelected() {
+    if (selectedNoteIds.size === 0) return;
+    recordHistory('Delete selected');
+    notes = notes.filter((n) => !selectedNoteIds.has(n.id));
+    selectedNoteIds.clear();
+  }
+
+  // ── Clipboard ─────────────────────────────────────────────────────────────
+
+  function copy() {
+    const selected = notes
+      .filter((n) => selectedNoteIds.has(n.id))
+      .sort((a, b) => a.startBeat - b.startBeat);
+    if (selected.length === 0) return;
+    const earliest = selected[0].startBeat;
+    clipboard = {
+      notes: selected.map((n) => ({ ...n, startBeat: n.startBeat - earliest })),
+    };
+  }
+
+  function paste(atBeat: number) {
+    if (!clipboard || clipboard.notes.length === 0) return;
+    recordHistory('Paste');
+    const newNotes = clipboard.notes.map((n) =>
+      clampNote({ ...n, id: crypto.randomUUID(), startBeat: n.startBeat + atBeat }),
+    );
+    notes = [...notes, ...newNotes];
+    for (const n of newNotes) extendTotalBeatsIfNeeded(n);
+    selectedNoteIds.clear();
+    for (const n of newNotes) selectedNoteIds.add(n.id);
+  }
+
+  function duplicateSelection() {
+    const ctx = selectionContext;
+    if (ctx.count === 0 || !ctx.beatRange) return;
+    recordHistory('Duplicate');
+    const span = ctx.beatRange.end - ctx.beatRange.start;
+    const duped = ctx.notes.map((n) =>
+      clampNote({ ...n, id: crypto.randomUUID(), startBeat: n.startBeat + span }),
+    );
+    notes = [...notes, ...duped];
+    for (const n of duped) extendTotalBeatsIfNeeded(n);
+    selectedNoteIds.clear();
+    for (const n of duped) selectedNoteIds.add(n.id);
+  }
+
+  // ── Undo / Redo ───────────────────────────────────────────────────────────
+
+  function undo() {
+    const entry = _history.undo(currentSnapshot);
+    syncHistory();
+    if (!entry) return;
+    notes = entry.notes;
+    const ids = new SvelteSet(notes.map((n) => n.id));
+    for (const id of selectedNoteIds) {
+      if (!ids.has(id)) selectedNoteIds.delete(id);
+    }
+  }
+
+  function redo() {
+    const entry = _history.redo(currentSnapshot);
+    syncHistory();
+    if (!entry) return;
+    notes = entry.notes;
+    const ids = new SvelteSet(notes.map((n) => n.id));
+    for (const id of selectedNoteIds) {
+      if (!ids.has(id)) selectedNoteIds.delete(id);
+    }
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  return {
+    get notes() {
+      return notes;
+    },
+
+    get isPlaying() {
+      return isPlaying;
+    },
+    set isPlaying(v: boolean) {
+      isPlaying = v;
+    },
+
+    get isRecording() {
+      return isRecording;
+    },
+    set isRecording(v: boolean) {
+      isRecording = v;
+    },
+
+    get currentBeat() {
+      return currentBeat;
+    },
+    set currentBeat(v: number) {
+      currentBeat = v;
+    },
+
+    get snapDenominator() {
+      return snapDenominator;
+    },
+    set snapDenominator(v: SnapDenominator) {
+      snapDenominator = v;
+    },
+
+    get showVelocity() {
+      return showVelocity;
+    },
+    set showVelocity(v: boolean) {
+      showVelocity = v;
+    },
+
+    get loopEnabled() {
+      return loopEnabled;
+    },
+    set loopEnabled(v: boolean) {
+      loopEnabled = v;
+    },
+
+    get totalBeats() {
+      return totalBeats;
+    },
+
+    get pixelsPerBeat() {
+      return pixelsPerBeat;
+    },
+    set pixelsPerBeat(v: number) {
+      pixelsPerBeat = Math.max(20, Math.min(240, v));
+    },
+
+    get rowHeight() {
+      return rowHeight;
+    },
+
+    get tempo() {
+      return tempo;
+    },
+    set tempo(v: number) {
+      tempo = v;
+    },
+
+    get synthSettings() {
+      return synthSettings;
+    },
+    set synthSettings(v: SynthSettings) {
+      synthSettings = v;
+    },
+
+    get trackName() {
+      return trackName;
+    },
+    set trackName(v: string) {
+      trackName = v;
+    },
+
+    get snapBeats() {
+      return snapBeats;
+    },
+
+    get selectedNoteIds() {
+      return selectedNoteIds;
+    },
+
+    get selectionAnchor() {
+      return selectionAnchor;
+    },
+
+    get interactionMode() {
+      return interactionMode;
+    },
+    set interactionMode(v: GridInteractionMode) {
+      interactionMode = v;
+    },
+
+    get clipboard() {
+      return clipboard;
+    },
+
+    get selectionContext() {
+      return selectionContext;
+    },
+
+    /** Reactive-mirrored view of history state for UI bindings. */
+    get history() {
+      return {
+        get canUndo() {
+          return _canUndo;
+        },
+        get canRedo() {
+          return _canRedo;
+        },
+        get undoLabel() {
+          return _undoLabel;
+        },
+        get redoLabel() {
+          return _redoLabel;
+        },
+        record(label: string, snapshot: () => Omit<DocumentSnapshot, 'label'>) {
+          _history.record(label, snapshot);
+          syncHistory();
+        },
+      };
+    },
+
+    addNote,
+    removeNote,
+    updateNote,
+    clearNotes,
+    selectNote,
+    selectAll,
+    deselectAll,
+    selectNotes,
+    setAnchor,
+    clearAnchor,
+    selectRange,
+    deleteSelected,
+    copy,
+    paste,
+    duplicateSelection,
+    undo,
+    redo,
+  };
+}
+
+export type Store = ReturnType<typeof createStore>;
