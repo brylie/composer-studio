@@ -65,6 +65,22 @@ export function midiToFreq(midiNote: number): number {
 /** Minimum note duration in beats. Not tied to snap so validity is snap-independent. */
 export const MIN_DURATION_BEATS = 1 / 64;
 
+/**
+ * Enforce all Note field invariants (editing-model.md). Every mutation —
+ * store methods and command run() results alike — goes through this.
+ * Lives in the Domain layer so commands/*.ts can import it without
+ * depending on Application state (store.svelte.ts), per architecture.md.
+ */
+export function clampNote(note: Note): Note {
+  return {
+    ...note,
+    midiNote: Math.max(MIN_MIDI, Math.min(MAX_MIDI, Math.round(note.midiNote))),
+    startBeat: Math.max(0, note.startBeat),
+    durationBeats: Math.max(MIN_DURATION_BEATS, note.durationBeats),
+    velocity: Math.max(1, Math.min(127, Math.round(note.velocity))),
+  };
+}
+
 // ── Interaction mode ──────────────────────────────────────────────────────────
 
 export type GridInteractionMode = 'draw' | 'select';
@@ -95,6 +111,14 @@ export interface Layer {
   id: string;
 }
 
+// Stub for Phase 7 (chord track) ───────────────────────────────────────────
+
+export interface ChordEvent {
+  // Placeholder — real implementation in Phase 7
+  pitchClasses: number[];
+  startBeat: number;
+}
+
 export interface SelectionContext {
   notes: Note[];
   count: number;
@@ -103,6 +127,18 @@ export interface SelectionContext {
   isContiguous: boolean;
   activeScales: ActiveScaleSegment[]; // [] until Phase 6
   activeLayers: Layer[]; // [] until Phase 10
+}
+
+// ── CommandContext (transformations.md) ────────────────────────────────────────
+
+/**
+ * What every CommandDescriptor.isApplicable()/run() receives. Extends
+ * SelectionContext with what generators need beyond the selection itself.
+ */
+export interface CommandContext extends SelectionContext {
+  allNotes: Note[];
+  playhead: number;
+  chordTrack: ChordEvent[]; // [] until Phase 7
 }
 
 // ── Command history ───────────────────────────────────────────────────────────

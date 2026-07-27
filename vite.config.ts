@@ -48,7 +48,11 @@ export default defineConfig({
         'src/lib/piano-roll/history.ts',
         'src/lib/piano-roll/types.ts',
         'src/lib/piano-roll/store.svelte.ts',
+        'src/lib/piano-roll/random.ts',
+        'src/lib/piano-roll/commands/**/*.ts',
+        'src/lib/music-theory/**/*.ts',
       ],
+      exclude: ['src/lib/piano-roll/commands/test-helpers.ts'],
       thresholds: {
         lines: 80,
         functions: 80,
