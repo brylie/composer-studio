@@ -4,6 +4,7 @@
   const { store } = getEditorState();
   import { exportMidi } from './midi-export.js';
   import Toolbar from './Toolbar.svelte';
+  import CommandRibbon from './CommandRibbon.svelte';
   import PianoKeys from './PianoKeys.svelte';
   import NoteGrid from './NoteGrid.svelte';
   import SynthPanel from './SynthPanel.svelte';
@@ -125,6 +126,8 @@
 
   <!-- ── Toolbar ── -->
   <Toolbar />
+
+  <CommandRibbon />
 
   <!-- ── Main body ── -->
   <div class="body">

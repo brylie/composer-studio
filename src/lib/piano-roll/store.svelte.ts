@@ -1,4 +1,5 @@
 import { SvelteSet } from 'svelte/reactivity';
+import { commandRegistry } from './commands/index.js';
 import { CommandHistory, isContiguous } from './history.js';
 import type {
   ActiveScaleSegment,
@@ -334,6 +335,23 @@ export function createStore() {
     pruneSelectionToExistingNotes();
   }
 
+  function executeCommand(commandId: string, params?: Record<string, unknown>) {
+    const descriptor = commandRegistry.find((command) => command.id === commandId);
+    if (!descriptor) return false;
+
+    const ctx = commandContext;
+    if (!descriptor.isApplicable(ctx)) return false;
+
+    const resolvedParams = params ?? {};
+    if ('run' in descriptor && descriptor.run) {
+      const result = descriptor.run(ctx, resolvedParams);
+      applyCommandResult(result);
+      return true;
+    }
+
+    return false;
+  }
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   return {
@@ -491,6 +509,7 @@ export function createStore() {
     undo,
     redo,
     applyCommandResult,
+    executeCommand,
   };
 }
 

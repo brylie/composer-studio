@@ -403,6 +403,23 @@ describe('createStore — commandContext', () => {
   });
 });
 
+// ── createStore — executeCommand ───────────────────────────────────────────
+
+describe('createStore — executeCommand', () => {
+  it('runs a registry command with params and records history', () => {
+    const store = createStore();
+    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.selectNote('a', false);
+
+    const executed = store.executeCommand('transpose', { semitones: 5 });
+
+    expect(executed).toBe(true);
+    expect(store.notes[0].midiNote).toBe(65);
+    expect(store.history.canUndo).toBe(true);
+    expect(store.history.undoLabel).toBe('Transpose +5');
+  });
+});
+
 // ── createStore — applyCommandResult ──────────────────────────────────────────
 
 describe('createStore — applyCommandResult', () => {
