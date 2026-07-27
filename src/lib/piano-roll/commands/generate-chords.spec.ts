@@ -77,7 +77,7 @@ describe('generateChords', () => {
     const result = runCommand(generateChords, ctx, {
       octaveRange: { min: 3, max: 5 },
       voiceCount: 3,
-      voicingStrategy: 'closed',
+      voicingStrategy: 'smooth-voice-leading',
       source: 'chord-track',
     });
     expect(result.notes).toEqual(melody);

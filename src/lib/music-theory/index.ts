@@ -66,9 +66,12 @@ export function voiceChord(
   let voicing: number[];
   if (!previousVoicing || previousVoicing.length === 0) {
     // First chord: closed voicing, spread evenly from the bottom of the range.
+    // If there are fewer candidates than voiceCount, return only the distinct
+    // candidates available rather than duplicating the final one.
     voicing = [];
-    for (let i = 0; i < voiceCount; i++) {
-      voicing.push(candidates[Math.min(i, candidates.length - 1)]);
+    const count = Math.min(voiceCount, candidates.length);
+    for (let i = 0; i < count; i++) {
+      voicing.push(candidates[i]);
     }
   } else {
     // Greedily assign each previous voice to its nearest still-available
@@ -103,9 +106,16 @@ export function voiceChord(
     // Smooth the top voice specifically using @tonaljs/voice-leading: if an
     // octave-shifted alternative for the top note is also in range, let
     // topNoteDiff decide which one continues more smoothly from the
-    // previous top note.
+    // previous top note. The top voice is whichever note has the highest
+    // MIDI value, not necessarily the last element (assignment order above
+    // follows previousVoicing's order, which the greedy nearest-neighbor
+    // pass can leave out of pitch order).
     if (voicing.length > 0) {
-      const currentTop = voicing[voicing.length - 1];
+      let topIndex = 0;
+      for (let i = 1; i < voicing.length; i++) {
+        if (voicing[i] > voicing[topIndex]) topIndex = i;
+      }
+      const currentTop = voicing[topIndex];
       const octaveDown = currentTop - 12;
       const octaveUp = currentTop + 12;
       const alt = [octaveDown, octaveUp].find(
@@ -117,7 +127,7 @@ export function voiceChord(
         const chosenName = topNoteDiff(options, lastTop)[0];
         const chosenMidi = getNote(chosenName).midi;
         if (chosenMidi !== null) {
-          voicing[voicing.length - 1] = chosenMidi;
+          voicing[topIndex] = chosenMidi;
         }
       }
     }

@@ -72,12 +72,18 @@ export const MIN_DURATION_BEATS = 1 / 64;
  * depending on Application state (store.svelte.ts), per architecture.md.
  */
 export function clampNote(note: Note): Note {
+  const midiNote = Number.isFinite(note.midiNote) ? note.midiNote : MIN_MIDI;
+  const startBeat = Number.isFinite(note.startBeat) ? note.startBeat : 0;
+  const durationBeats = Number.isFinite(note.durationBeats)
+    ? note.durationBeats
+    : MIN_DURATION_BEATS;
+  const velocity = Number.isFinite(note.velocity) ? note.velocity : 1;
   return {
     ...note,
-    midiNote: Math.max(MIN_MIDI, Math.min(MAX_MIDI, Math.round(note.midiNote))),
-    startBeat: Math.max(0, note.startBeat),
-    durationBeats: Math.max(MIN_DURATION_BEATS, note.durationBeats),
-    velocity: Math.max(1, Math.min(127, Math.round(note.velocity))),
+    midiNote: Math.max(MIN_MIDI, Math.min(MAX_MIDI, Math.round(midiNote))),
+    startBeat: Math.max(0, startBeat),
+    durationBeats: Math.max(MIN_DURATION_BEATS, durationBeats),
+    velocity: Math.max(1, Math.min(127, Math.round(velocity))),
   };
 }
 

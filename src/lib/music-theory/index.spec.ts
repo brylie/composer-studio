@@ -61,13 +61,23 @@ describe('voiceChord', () => {
 
   it('falls back to fewer notes when the range has fewer distinct candidates than voiceCount', () => {
     const voicing = voiceChord(new Set([0]), { min: 4, max: 4 }, 3, null);
-    expect(voicing.length).toBeLessThanOrEqual(3);
-    expect(voicing.length).toBeGreaterThan(0);
+    // Only one distinct MIDI candidate (chroma 0) exists in a single-octave range,
+    // so the result must be exactly that one note — not the final candidate duplicated.
+    expect(voicing).toHaveLength(1);
+    expect(new Set(voicing).size).toBe(voicing.length);
   });
 
   it('pads a shorter previous voicing (fewer voices than requested) before smoothing', () => {
     const shortPrevious = [60]; // only 1 previous voice, but requesting 3 now
     const voicing = voiceChord(new Set([0, 4, 7]), { min: 3, max: 5 }, 3, shortPrevious);
     expect(voicing).toHaveLength(3);
+  });
+
+  it('returns fewer notes than voiceCount when a smoothed voicing runs out of candidates', () => {
+    const previous = [48, 52, 55]; // 3-voice previous chord
+    // Only one distinct MIDI candidate (chroma 0) exists in this single-octave range,
+    // so the greedy assignment pool empties after the first voice is assigned.
+    const voicing = voiceChord(new Set([0]), { min: 4, max: 4 }, 3, previous);
+    expect(voicing).toHaveLength(1);
   });
 });

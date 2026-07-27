@@ -7,9 +7,14 @@ import type { CommandDescriptor } from './types.js';
 export interface GenerateChordsParams extends Record<string, unknown> {
   octaveRange: OctaveRange;
   voiceCount: number;
-  voicingStrategy: 'closed' | 'open' | 'drop2' | 'smooth-voice-leading';
+  /**
+   * Only 'smooth-voice-leading' (voiceChord's actual behavior: closed voicing
+   * for the first chord, nearest-neighbor voice leading thereafter) is
+   * implemented this phase. 'open'/'drop2'/plain 'closed' voicing strategies
+   * and a separate targetRange constraint are deferred to a later phase.
+   */
+  voicingStrategy: 'smooth-voice-leading';
   source: 'chord-track' | 'selection-derived';
-  targetRange?: { min: number; max: number };
 }
 
 interface Segment {
@@ -66,12 +71,7 @@ export const generateChords: CommandDescriptor<GenerateChordsParams> = {
       label: 'Voicing',
       type: 'select',
       default: 'smooth-voice-leading',
-      options: [
-        { value: 'closed', label: 'Closed' },
-        { value: 'open', label: 'Open' },
-        { value: 'drop2', label: 'Drop 2' },
-        { value: 'smooth-voice-leading', label: 'Smooth voice leading' },
-      ],
+      options: [{ value: 'smooth-voice-leading', label: 'Smooth voice leading' }],
     },
     {
       key: 'source',
