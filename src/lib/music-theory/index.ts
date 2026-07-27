@@ -118,20 +118,23 @@ export function voiceChord(
       const currentTop = voicing[topIndex];
       const octaveDown = currentTop - 12;
       const octaveUp = currentTop + 12;
+      const otherVoices = new Set(voicing.filter((_, i) => i !== topIndex));
       const alt = [octaveDown, octaveUp].find(
-        (m) => m >= minMidi && m <= maxMidi && pitchClasses.has(m % 12),
+        (m) => m >= minMidi && m <= maxMidi && pitchClasses.has(m % 12) && !otherVoices.has(m),
       );
       if (alt !== undefined) {
         const lastTop = [noteNameFromMidi(previousVoicing[previousVoicing.length - 1])];
         const options = [[noteNameFromMidi(currentTop)], [noteNameFromMidi(alt)]];
         const chosenName = topNoteDiff(options, lastTop)[0];
         const chosenMidi = getNote(chosenName).midi;
-        if (chosenMidi !== null) {
+        if (chosenMidi !== null && !otherVoices.has(chosenMidi)) {
           voicing[topIndex] = chosenMidi;
         }
       }
     }
   }
 
-  return voicing.sort((a, b) => a - b);
+  // Defensive dedupe: no two voices should share the same MIDI number, even if an
+  // edge case above (or a future change) would otherwise let one slip through.
+  return [...new Set(voicing)].sort((a, b) => a - b);
 }

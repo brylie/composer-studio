@@ -80,4 +80,17 @@ describe('voiceChord', () => {
     const voicing = voiceChord(new Set([0]), { min: 4, max: 4 }, 3, previous);
     expect(voicing).toHaveLength(1);
   });
+
+  it('never emits duplicate MIDI values, even when top-voice octave smoothing would collide with another voice', () => {
+    // Candidates (chroma 0, C) in a { min: 3, max: 5 } range: 48, 60, 72.
+    // previousVoicing = [59, 61] forces the greedy pass to assign 60 to the
+    // lower voice and 72 to the top voice (its true nearest candidate, 60,
+    // is already taken). The octave-down alternative for the top voice (60)
+    // would then collide with the already-assigned lower voice, and
+    // topNoteDiff would prefer it (61 is much closer to 60 than to 72) —
+    // exercising the duplicate-avoidance guard.
+    const voicing = voiceChord(new Set([0]), { min: 3, max: 5 }, 2, [59, 61]);
+    expect(new Set(voicing).size).toBe(voicing.length);
+    expect(voicing).toEqual([60, 72]);
+  });
 });
