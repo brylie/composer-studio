@@ -2,7 +2,9 @@ import { SvelteSet } from 'svelte/reactivity';
 import { CommandHistory, isContiguous } from './history.js';
 import type {
   ActiveScaleSegment,
+  ChordEvent,
   ClipboardContents,
+  CommandContext,
   DocumentSnapshot,
   GridInteractionMode,
   Layer,
@@ -12,7 +14,7 @@ import type {
   SnapDenominator,
   SynthSettings,
 } from './types.js';
-import { MAX_MIDI, MIN_DURATION_BEATS, MIN_MIDI } from './types.js';
+import { clampNote } from './types.js';
 
 export { CommandHistory, isContiguous };
 
@@ -22,19 +24,6 @@ const DEFAULT_SYNTH: SynthSettings = {
   envelope: { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 },
   filter: { enabled: false, cutoff: 2000, resonance: 1 },
 };
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-/** Enforce all Note field invariants. Every mutation goes through this. */
-function clampNote(note: Note): Note {
-  return {
-    ...note,
-    midiNote: Math.max(MIN_MIDI, Math.min(MAX_MIDI, Math.round(note.midiNote))),
-    startBeat: Math.max(0, note.startBeat),
-    durationBeats: Math.max(MIN_DURATION_BEATS, note.durationBeats),
-    velocity: Math.max(1, Math.min(127, Math.round(note.velocity))),
-  };
-}
 
 // ── Store factory ──────────────────────────────────────────────────────────────
 
@@ -114,6 +103,15 @@ export function createStore() {
       activeLayers: [] as Layer[], // Phase 10 stub
     };
   });
+
+  // ── Derived CommandContext (transformations.md) ─────────────────────
+
+  const commandContext = $derived.by((): CommandContext => ({
+    ...selectionContext,
+    allNotes: notes,
+    playhead: currentBeat,
+    chordTrack: [] as ChordEvent[], // Phase 7 stub
+  }));
 
   // ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -319,6 +317,23 @@ export function createStore() {
     pruneSelectionToExistingNotes();
   }
 
+  // ── Commands (transformations.md) ─────────────────────────────────
+
+  /**
+   * Applies a CommandDescriptor.run() result: records history (before the
+   * mutation, per command-history.md), replaces the whole-document notes
+   * array with the command's returned set (re-clamped defensively), and
+   * prunes selection to whatever notes still exist — same pattern as
+   * undo()/redo() above.
+   */
+  function applyCommandResult(result: { notes: Note[]; label: string }) {
+    recordHistory(result.label);
+    const clamped = result.notes.map(clampNote);
+    notes = clamped;
+    for (const n of clamped) extendTotalBeatsIfNeeded(n);
+    pruneSelectionToExistingNotes();
+  }
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   return {
@@ -431,6 +446,10 @@ export function createStore() {
       return selectionContext;
     },
 
+    get commandContext() {
+      return commandContext;
+    },
+
     /** Reactive-mirrored view of history state for UI bindings. */
     get history() {
       return {
@@ -471,6 +490,7 @@ export function createStore() {
     duplicateSelection,
     undo,
     redo,
+    applyCommandResult,
   };
 }
 

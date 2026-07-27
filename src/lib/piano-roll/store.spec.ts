@@ -384,6 +384,87 @@ describe('createStore — selectionContext', () => {
   });
 });
 
+// ── createStore — commandContext ──────────────────────────────────────────────
+
+describe('createStore — commandContext', () => {
+  it('extends selectionContext with allNotes, playhead, and an empty chordTrack stub', () => {
+    const store = createStore();
+    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({ id: 'b', midiNote: 64, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.selectNote('a', false);
+
+    const ctx = store.commandContext;
+    expect(ctx.allNotes).toHaveLength(2);
+    expect(ctx.playhead).toBe(store.currentBeat);
+    expect(ctx.chordTrack).toEqual([]);
+    // still carries the selection-derived fields
+    expect(ctx.count).toBe(1);
+    expect(ctx.notes[0].id).toBe('a');
+  });
+});
+
+// ── createStore — applyCommandResult ──────────────────────────────────────────
+
+describe('createStore — applyCommandResult', () => {
+  it('replaces the notes array with the (clamped) command result', () => {
+    const store = createStore();
+    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+
+    store.applyCommandResult({
+      notes: [{ id: 'a', midiNote: 999, startBeat: -5, durationBeats: 0, velocity: 200 }],
+      label: 'Test command',
+    });
+
+    expect(store.notes).toHaveLength(1);
+    expect(store.notes[0].midiNote).toBe(MAX_MIDI);
+    expect(store.notes[0].startBeat).toBe(0);
+    expect(store.notes[0].durationBeats).toBe(MIN_DURATION_BEATS);
+    expect(store.notes[0].velocity).toBe(127);
+  });
+
+  it('records history so undo() restores the pre-command notes', () => {
+    const store = createStore();
+    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+
+    store.applyCommandResult({
+      notes: [{ id: 'a', midiNote: 65, startBeat: 0, durationBeats: 1, velocity: 100 }],
+      label: 'Transpose',
+    });
+    expect(store.notes[0].midiNote).toBe(65);
+    expect(store.history.canUndo).toBe(true);
+    expect(store.history.undoLabel).toBe('Transpose');
+
+    store.undo();
+    expect(store.notes[0].midiNote).toBe(60);
+  });
+
+  it('extends totalBeats when the command result has notes beyond the current end', () => {
+    const store = createStore();
+    const initialBeats = store.totalBeats;
+    store.applyCommandResult({
+      notes: [{ id: 'a', midiNote: 60, startBeat: 60, durationBeats: 8, velocity: 100 }],
+      label: 'Grow',
+    });
+    expect(store.totalBeats).toBeGreaterThan(initialBeats);
+  });
+
+  it('prunes selection to only notes that still exist after the command result', () => {
+    const store = createStore();
+    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({ id: 'b', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.selectAll();
+    expect(store.selectionContext.count).toBe(2);
+
+    store.applyCommandResult({
+      notes: [{ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 }],
+      label: 'Remove one',
+    });
+
+    expect(store.selectionContext.count).toBe(1);
+    expect(store.selectionContext.notes[0].id).toBe('a');
+  });
+});
+
 // ── createStore — clipboard ───────────────────────────────────────────────────
 
 describe('createStore — clipboard', () => {

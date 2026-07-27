@@ -27,3 +27,4 @@ repos:
         entry: npx eslint --fix
         language: system
         files: \.(js|cjs|mjs|ts|svelte)$
+        require_serial: true
