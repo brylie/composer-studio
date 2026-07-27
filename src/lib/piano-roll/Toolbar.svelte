@@ -716,4 +716,14 @@
     gap: 2px;
     align-items: center;
   }
+
+  /* ── Responsive: mobile Quick Access Bar collapses to transport + undo/redo ── */
+  @media (max-width: 599px) {
+    .mode-group,
+    .snap-group,
+    .zoom-group,
+    .text-btn {
+      display: none;
+    }
+  }
 </style>
