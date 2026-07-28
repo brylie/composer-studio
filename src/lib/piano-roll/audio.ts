@@ -1,11 +1,45 @@
+import * as Tone from 'tone';
 import type { Note, SynthSettings } from './types.js';
 import { midiToFreq } from './types.js';
 
-let _ctx: AudioContext | null = null;
+// ── Shared instrument (libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth) ──
+//
+// One Tone.PolySynth("piano") for the whole document, routed through a single
+// shared post-synth Tone.Filter — not a per-voice filter, matching the Sound
+// drawer's one Cutoff/Resonance pair. Created lazily since Tone can't touch
+// the audio context before a user gesture.
 
-export function getAudioContext(): AudioContext {
-  _ctx ??= new AudioContext();
-  return _ctx;
+let _piano: Tone.PolySynth | null = null;
+let _filter: Tone.Filter | null = null;
+let _filterEnabled = false;
+
+function getPiano(): { piano: Tone.PolySynth; filter: Tone.Filter } {
+  if (!_piano || !_filter) {
+    _filter = new Tone.Filter({ frequency: 4000, Q: 1, type: 'lowpass' }).toDestination();
+    _piano = new Tone.PolySynth(Tone.Synth).toDestination();
+  }
+  return { piano: _piano, filter: _filter };
+}
+
+function applySettings(settings: SynthSettings): void {
+  const { piano, filter } = getPiano();
+  piano.set({
+    oscillator: { type: settings.waveform },
+    envelope: settings.envelope,
+  });
+  piano.volume.value = Tone.gainToDb(Math.max(0.0001, settings.volume / 100));
+  filter.frequency.value = settings.filter.cutoff;
+  filter.Q.value = settings.filter.resonance;
+
+  if (settings.filter.enabled !== _filterEnabled) {
+    _filterEnabled = settings.filter.enabled;
+    piano.disconnect();
+    if (_filterEnabled) {
+      piano.connect(filter);
+    } else {
+      piano.toDestination();
+    }
+  }
 }
 
 export function triggerNote(
@@ -14,45 +48,26 @@ export function triggerNote(
   durationSec: number,
   atTime: number,
 ): void {
-  const ctx = getAudioContext();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  const vol = settings.volume / 100;
-  const { attack, decay, sustain, release } = settings.envelope;
-
-  osc.type = settings.waveform;
-  osc.frequency.value = midiToFreq(midiNote);
-
-  let filter: BiquadFilterNode | null = null;
-  if (settings.filter.enabled) {
-    filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = settings.filter.cutoff;
-    filter.Q.value = settings.filter.resonance;
-    osc.connect(filter);
-    filter.connect(gain);
-  } else {
-    osc.connect(gain);
-  }
-  gain.connect(ctx.destination);
-
-  const t = atTime;
-  gain.gain.setValueAtTime(0, t);
-  gain.gain.linearRampToValueAtTime(vol, t + attack);
-  gain.gain.linearRampToValueAtTime(vol * sustain, t + attack + decay);
-
-  const releaseStart = Math.max(t + attack + decay, t + durationSec - release);
-  gain.gain.setValueAtTime(vol * sustain, releaseStart);
-  gain.gain.linearRampToValueAtTime(0, releaseStart + release);
-
-  osc.onended = () => {
-    gain.disconnect(ctx.destination);
-    filter?.disconnect();
-  };
-
-  osc.start(t);
-  osc.stop(releaseStart + release + 0.05);
+  applySettings(settings);
+  const { piano } = getPiano();
+  piano.triggerAttackRelease(midiToFreq(midiNote), durationSec, atTime);
 }
+
+export function auditionNote(midiNote: number, settings: SynthSettings): void {
+  void Tone.start();
+  applySettings(settings);
+  const { piano } = getPiano();
+  piano.triggerAttackRelease(midiToFreq(midiNote), 0.5);
+}
+
+// ── Playback scheduler ───────────────────────────────────────────────────────
+//
+// Tone.Transport replaces the old setInterval/lookahead scheduler: it's a
+// drift-corrected clock driven off the audio context itself, and its native
+// loop/loopStart/loopEnd wraps the transport's own position for us instead of
+// this module doing the min/maxLoop-iteration math by hand. loopStart is
+// always 0 today — the Ruler's adjustable loop points are a planned feature
+// (audio-engine.md#loop-handling), not implemented yet.
 
 export interface PlaybackOptions {
   getNotes: () => Note[];
@@ -65,82 +80,89 @@ export interface PlaybackOptions {
   onStop: () => void;
 }
 
-let _intervalId: ReturnType<typeof setInterval> | null = null;
+const LOOKAHEAD_SEC = 0.1;
+const SCAN_INTERVAL_SEC = 0.025;
+
+let _scheduleEventId: number | null = null;
 let _rafId: number | null = null;
-let _startAudioTime = 0;
-let _startBeat = 0;
-const _scheduled = new Map<string, number>();
 let _options: PlaybackOptions | null = null;
 
-const LOOKAHEAD_SEC = 0.1;
-const INTERVAL_MS = 25;
+/** Bumped each time the transport wraps, so notes near the loop boundary are keyed per-pass and can't double-trigger. */
+let _loopPass = 0;
+/** `${noteId}:${pass}` → pass, so stale passes can be pruned without scanning the whole document each tick. */
+const _scheduled = new Map<string, number>();
+
+function handleTransportLoop(): void {
+  _loopPass++;
+}
 
 export function startPlayback(options: PlaybackOptions): void {
   stopPlayback();
+  void Tone.start();
 
-  const ctx = getAudioContext();
-  if (ctx.state === 'suspended') void ctx.resume();
-
+  const transport = Tone.getTransport();
   _options = options;
-  _startBeat = options.startBeat;
-  _startAudioTime = ctx.currentTime;
+  _loopPass = 0;
   _scheduled.clear();
 
-  function schedule(): void {
+  transport.bpm.value = options.getTempo();
+  transport.ticks = Math.round(options.startBeat * transport.PPQ);
+  transport.on('loop', handleTransportLoop);
+
+  function scan(time: number): void {
     if (!_options) return;
-    const ctx = getAudioContext();
     const { getNotes, getSettings, getTempo, getTotalBeats, getLoopEnabled } = _options;
-    const bps = getTempo() / 60;
+
+    transport.bpm.value = getTempo();
     const totalBeats = Math.max(0.001, getTotalBeats());
     const loopEnabled = getLoopEnabled();
-    const elapsed = ctx.currentTime - _startAudioTime;
-    const currentBeat = _startBeat + elapsed * bps;
+    transport.loop = loopEnabled;
+    transport.loopStart = 0;
+    transport.loopEnd = totalBeats * (60 / transport.bpm.value);
+
+    applySettings(getSettings());
+    const { piano } = getPiano();
+
+    const bps = transport.bpm.value / 60;
+    const currentBeat = transport.getTicksAtTime(time) / transport.PPQ;
     const windowEnd = currentBeat + LOOKAHEAD_SEC * bps;
 
+    for (const [key, pass] of _scheduled) {
+      if (pass < _loopPass) _scheduled.delete(key);
+    }
+
     const notes = getNotes();
-    const settings = getSettings();
 
-    const minLoop = loopEnabled ? Math.max(0, Math.floor((currentBeat - 0.01) / totalBeats)) : 0;
-    const maxLoop = loopEnabled ? minLoop + 1 : 0;
+    function scheduleWindow(windowStart: number, windowStop: number, pass: number): void {
+      for (const note of notes) {
+        if (note.startBeat < windowStart - 0.01 || note.startBeat > windowStop) continue;
+        const key = `${note.id}:${String(pass)}`;
+        if (_scheduled.has(key)) continue;
+        _scheduled.set(key, pass);
 
-    // Keep only loops in the active scheduling window to avoid unbounded growth.
-    for (const [key, loop] of _scheduled) {
-      if (loop < minLoop || loop > maxLoop) {
-        _scheduled.delete(key);
+        const beatsFromNow = note.startBeat - currentBeat + (pass - _loopPass) * totalBeats;
+        const noteTime = time + beatsFromNow / bps;
+        const durationSec = note.durationBeats / bps;
+        piano.triggerAttackRelease(midiToFreq(note.midiNote), durationSec, noteTime);
       }
     }
 
-    for (const note of notes) {
-      for (let loop = minLoop; loop <= maxLoop; loop++) {
-        const noteBeat = note.startBeat + loop * totalBeats;
-        if (noteBeat < currentBeat - 0.01) continue;
-        if (noteBeat > windowEnd) continue;
-
-        const key = `${note.id}:${String(loop)}`;
-        if (_scheduled.has(key)) continue;
-        _scheduled.set(key, loop);
-
-        const noteStartTime = _startAudioTime + (noteBeat - _startBeat) / bps;
-        const durationSec = note.durationBeats / bps;
-        triggerNote(note.midiNote, settings, durationSec, noteStartTime);
-      }
+    scheduleWindow(currentBeat, Math.min(windowEnd, totalBeats), _loopPass);
+    if (loopEnabled && windowEnd > totalBeats) {
+      scheduleWindow(0, windowEnd - totalBeats, _loopPass + 1);
     }
   }
 
-  schedule();
-  _intervalId = setInterval(schedule, INTERVAL_MS);
+  scan(Tone.now());
+  _scheduleEventId = transport.scheduleRepeat(scan, SCAN_INTERVAL_SEC);
+  transport.start();
 
   function tick(): void {
     if (!_options) return;
-    const ctx = getAudioContext();
-    const bps = _options.getTempo() / 60;
+    const beat = transport.ticks / transport.PPQ;
     const totalBeats = Math.max(0.001, _options.getTotalBeats());
-    const elapsed = ctx.currentTime - _startAudioTime;
-    let beat = _startBeat + elapsed * bps;
 
-    if (_options.getLoopEnabled()) {
-      beat = beat % totalBeats;
-    } else if (beat >= totalBeats) {
+    if (!_options.getLoopEnabled() && beat >= totalBeats) {
       const onStop = _options.onStop;
       stopPlayback();
       onStop();
@@ -155,20 +177,24 @@ export function startPlayback(options: PlaybackOptions): void {
 }
 
 export function stopPlayback(): void {
-  if (_intervalId !== null) {
-    clearInterval(_intervalId);
-    _intervalId = null;
+  // Guard against touching Tone's global transport when nothing is playing —
+  // e.g. Toolbar's onDestroy calls this unconditionally, and onDestroy also
+  // runs during SSR (unlike onMount), where there's no AudioContext at all.
+  if (_options === null && _scheduleEventId === null && _rafId === null) return;
+
+  const transport = Tone.getTransport();
+  if (_scheduleEventId !== null) {
+    transport.clear(_scheduleEventId);
+    _scheduleEventId = null;
   }
+  transport.off('loop', handleTransportLoop);
+  transport.stop();
+  _piano?.releaseAll();
+
   if (_rafId !== null) {
     cancelAnimationFrame(_rafId);
     _rafId = null;
   }
   _scheduled.clear();
   _options = null;
-}
-
-export function auditionNote(midiNote: number, settings: SynthSettings): void {
-  const ctx = getAudioContext();
-  if (ctx.state === 'suspended') void ctx.resume();
-  triggerNote(midiNote, settings, 0.5, ctx.currentTime);
 }

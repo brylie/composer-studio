@@ -65,6 +65,7 @@
     "@tonaljs/chord": "^6.1.2",
     "@tonaljs/note": "^4.12.1",
     "@tonaljs/scale": "^4.13.4",
-    "@tonaljs/voice-leading": "^5.1.2"
+    "@tonaljs/voice-leading": "^5.1.2",
+    "tone": "^15.1.22"
   }
 }
