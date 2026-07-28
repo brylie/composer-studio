@@ -42,20 +42,32 @@ const PITCH_CLASS_NAMES = [
   'B',
 ] as const;
 
+function pitchClassName(pitchClass: number): string {
+  return PITCH_CLASS_NAMES[((pitchClass % 12) + 12) % 12];
+}
+
 /**
  * Same as pitchClassesForScale, but takes a numeric root pitch class (0-11,
  * matching ScaleEvent.root in tracks.md) instead of a note-name string —
  * the shape event tracks actually store.
  */
 export function pitchClassesForScaleEvent(root: number, mode: string): Set<number> {
-  const rootName = PITCH_CLASS_NAMES[((root % 12) + 12) % 12];
-  return pitchClassesForScale(rootName, mode);
+  return pitchClassesForScale(pitchClassName(root), mode);
 }
 
 /** Pitch classes (0-11) belonging to a named chord, e.g. pitchClassesForChord('C', 'maj7'). */
 export function pitchClassesForChord(root: string, quality: string): Set<number> {
   const chord = getChord(`${root}${quality}`);
   return new Set(chord.notes.map(chromaOf));
+}
+
+/**
+ * Same as pitchClassesForChord, but takes a numeric root pitch class (0-11,
+ * matching ChordEvent.root in tracks.md) instead of a note-name string —
+ * the shape event tracks actually store.
+ */
+export function pitchClassesForChordEvent(root: number, quality: string): Set<number> {
+  return pitchClassesForChord(pitchClassName(root), quality);
 }
 
 /** MIDI note number at the bottom of scientific-pitch-notation octave `octave` (C at that octave). */

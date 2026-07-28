@@ -1,4 +1,4 @@
-import type { ScaleEvent } from './timeline.js';
+import type { ChordEvent, LabelEvent, ScaleEvent } from './timeline.js';
 
 export interface Note {
   id: string;
@@ -126,14 +126,6 @@ export interface Layer {
   id: string;
 }
 
-// Stub for Phase 7 (chord track) ───────────────────────────────────────────
-
-export interface ChordEvent {
-  // Placeholder — real implementation in Phase 7
-  pitchClasses: number[];
-  startBeat: number;
-}
-
 export interface SelectionContext {
   notes: Note[];
   count: number;
@@ -153,7 +145,7 @@ export interface SelectionContext {
 export interface CommandContext extends SelectionContext {
   allNotes: Note[];
   playhead: number;
-  chordTrack: ChordEvent[]; // [] until Phase 7
+  chordTrack: ChordEvent[];
 }
 
 // ── Command history ───────────────────────────────────────────────────────────
@@ -162,5 +154,7 @@ export interface DocumentSnapshot {
   label: string;
   notes: Note[];
   scaleEvents: ScaleEvent[];
-  // chordEvents, arrangerSections added as those tracks land (Phase 7+)
+  chordEvents: ChordEvent[];
+  labelEvents: LabelEvent[];
+  // arrangerSections added once that track lands (Phase 9)
 }

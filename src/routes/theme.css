@@ -10,6 +10,8 @@
 
   /* Piano roll / tracks */
   --color-scale-degree: #38bdf8;
+  --color-chord-tone: #facc15;
+  --color-chord-tension: #fb7185;
   --color-loop-band: rgb(124 92 255 / 0.25);
 
   /* Arranger section palette, cycled by creation order */

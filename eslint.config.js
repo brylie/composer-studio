@@ -37,7 +37,6 @@ export default defineConfig(
             'playwright.config.ts',
             '.storybook/*.ts',
             'vitest.shims.d.ts',
-            'e2e/*.e2e.ts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,

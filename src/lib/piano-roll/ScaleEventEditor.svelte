@@ -59,16 +59,12 @@
 
   const { beat, existing, onSave, onDelete }: Props = $props();
 
-  let root = $state(0);
-  let mode = $state('major');
-
-  // Re-syncs whenever `existing` changes identity — covers both the initial
-  // mount and the parent re-targeting this editor at a different marker (or
-  // a fresh beat) without needing to remount the component.
-  $effect(() => {
-    root = existing?.root ?? 0;
-    mode = existing?.mode ?? 'major';
-  });
+  // Writable $derived: re-syncs whenever `existing` changes identity — covers
+  // both the initial mount and the parent re-targeting this editor at a
+  // different marker (or a fresh beat) — while staying locally editable via
+  // the bind:value bindings below.
+  let root = $derived(existing?.root ?? 0);
+  let mode = $derived(existing?.mode ?? 'major');
 </script>
 
 <div class="scale-editor">

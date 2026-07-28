@@ -122,6 +122,28 @@ export interface ScaleEvent extends TimelineEvent {
 }
 export type ScaleTrack = EventTrack<ScaleEvent>;
 
+/**
+ * Scale-aware but not scale-constrained (tracks.md#chord-track-placeholder):
+ * `quality` is the authoring convenience (a tonal.js chord symbol), while
+ * `pitchClassesForChordEvent` (music-theory/index.ts) derives the actual
+ * pitch classes everything else — highlighting, tension-checking,
+ * generate-chords's voicing math — consumes.
+ */
+export interface ChordEvent extends TimelineEvent {
+  root: number; // pitch class 0–11
+  quality: string; // tonal.js chord symbol ('maj7', 'sus4', 'm7b5', ...)
+}
+export type ChordTrack = EventTrack<ChordEvent>;
+
+/**
+ * Freeform point annotation (tracks.md#labels-track-placeholder) — doesn't
+ * affect playback or any transformation's behavior.
+ */
+export interface LabelEvent extends TimelineEvent {
+  text: string;
+}
+export type LabelTrack = EventTrack<LabelEvent>;
+
 // ── Bar math (timeline.md#time-signature-is-currently-hardcoded) ───────────
 
 /** Beats per bar for a time signature, in canonical quarter-note beats. */

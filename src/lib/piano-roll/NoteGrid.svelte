@@ -4,7 +4,7 @@
   import { isBlackKey, MIN_MIDI, MAX_MIDI, NOTE_COUNT } from './types.js';
   import type { Note } from './types.js';
   import { auditionNote } from './audio.js';
-  import { scaleSegments } from './tracks.js';
+  import { harmonySegments, scaleSegments } from './tracks.js';
 
   /** Shift or Ctrl/Cmd — the modifiers that mean "add to selection" rather than replace it. */
   function isAdditive(e: PointerEvent): boolean {
@@ -42,6 +42,28 @@
           width: (segment.endBeat - segment.startBeat) * store.pixelsPerBeat,
         })),
     ),
+  );
+
+  // Chord-tone highlighting (tracks.md#three-consumers-of-pitchclasses) —
+  // layered on top of the scale highlight above. Segment boundaries come
+  // from both the scale and chord tracks (harmonySegments), so a chord
+  // change mid-scale-segment still produces a visible boundary. A chord
+  // tone outside the active scale gets a distinct "tension" treatment
+  // instead of being silently dropped or drawn identically to a diatonic one.
+  const chordHighlightRects = $derived(
+    harmonySegments(store.scaleTrack, store.chordTrack, 0, store.totalBeats).flatMap((segment) => {
+      if (!segment.chordTones) return [];
+      const chordTones = segment.chordTones;
+      return noteRange
+        .filter((midi) => chordTones.has(midi % 12))
+        .map((midi) => ({
+          key: `chord:${String(segment.startBeat)}:${String(midi)}`,
+          left: segment.startBeat * store.pixelsPerBeat,
+          top: rowForMidi(midi) * store.rowHeight,
+          width: (segment.endBeat - segment.startBeat) * store.pixelsPerBeat,
+          tension: !segment.scaleDegrees.has(midi % 12),
+        }));
+    }),
   );
 
   // Bar-line positions honoring time-signature changes (timeline.md), replacing
@@ -356,6 +378,15 @@
     ></div>
   {/each}
 
+  <!-- Chord-tone highlighting (tracks.md) — layered on top of the scale highlight above -->
+  {#each chordHighlightRects as rect (rect.key)}
+    <div
+      class="chord-highlight"
+      class:tension={rect.tension}
+      style="left: {rect.left}px; top: {rect.top}px; width: {rect.width}px; height: {store.rowHeight}px;"
+    ></div>
+  {/each}
+
   <!-- Beat/8th/16th subdivision lines via CSS background on overlay -->
   <div class="grid-lines" style="width: {totalWidth}px; height: {totalHeight}px;"></div>
 
@@ -426,6 +457,25 @@
     border-bottom: 1px solid var(--color-scale-degree, #38bdf8);
     background: color-mix(in srgb, var(--color-scale-degree, #38bdf8) 8%, transparent);
     pointer-events: none;
+  }
+
+  /* ── Chord-tone highlighting (tracks.md) — stronger than the scale-degree
+     highlight above, since it's layered on top of it. A chord tone outside
+     the active scale (tension) gets a distinct color rather than the same
+     treatment as a diatonic one. ── */
+  .chord-highlight {
+    position: absolute;
+    box-sizing: border-box;
+    border-top: 2px solid var(--color-chord-tone, #facc15);
+    border-bottom: 2px solid var(--color-chord-tone, #facc15);
+    background: color-mix(in srgb, var(--color-chord-tone, #facc15) 18%, transparent);
+    pointer-events: none;
+  }
+
+  .chord-highlight.tension {
+    border-top-color: var(--color-chord-tension, #fb7185);
+    border-bottom-color: var(--color-chord-tension, #fb7185);
+    background: color-mix(in srgb, var(--color-chord-tension, #fb7185) 18%, transparent);
   }
 
   /* ── Bar lines — positioned per the time-signature track, not a fixed interval ── */

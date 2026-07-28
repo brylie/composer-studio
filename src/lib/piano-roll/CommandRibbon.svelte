@@ -71,24 +71,12 @@
   {#if activeCommand}
     <div class="params-form">
       {#each activeCommand.params ?? [] as field (field.key)}
-        <label class="field">
-          <span>{field.label}</span>
-          {#if field.type === 'number'}
-            <input
-              type="number"
-              value={typeof params[field.key] === 'number' ? params[field.key] : field.default}
-              oninput={(event) => {
-                updateParamValue(field.key, Number(event.currentTarget.value));
-              }}
-              min={field.min}
-              max={field.max}
-              step={field.step}
-            />
-          {:else if field.type === 'range'}
-            <div class="range-row">
+        {#if !field.showIf || field.showIf(params)}
+          <label class="field">
+            <span>{field.label}</span>
+            {#if field.type === 'number'}
               <input
-                class="slider"
-                type="range"
+                type="number"
                 value={typeof params[field.key] === 'number' ? params[field.key] : field.default}
                 oninput={(event) => {
                   updateParamValue(field.key, Number(event.currentTarget.value));
@@ -97,67 +85,81 @@
                 max={field.max}
                 step={field.step}
               />
-              <span class="range-value"
-                >{typeof params[field.key] === 'number' ? params[field.key] : field.default}</span
+            {:else if field.type === 'range'}
+              <div class="range-row">
+                <input
+                  class="slider"
+                  type="range"
+                  value={typeof params[field.key] === 'number' ? params[field.key] : field.default}
+                  oninput={(event) => {
+                    updateParamValue(field.key, Number(event.currentTarget.value));
+                  }}
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                />
+                <span class="range-value"
+                  >{typeof params[field.key] === 'number' ? params[field.key] : field.default}</span
+                >
+              </div>
+            {:else if field.type === 'select'}
+              <select
+                value={typeof params[field.key] === 'string' ? params[field.key] : field.default}
+                onchange={(event) => {
+                  updateParamValue(field.key, event.currentTarget.value);
+                }}
               >
-            </div>
-          {:else if field.type === 'select'}
-            <select
-              value={typeof params[field.key] === 'string' ? params[field.key] : field.default}
-              onchange={(event) => {
-                updateParamValue(field.key, event.currentTarget.value);
-              }}
-            >
-              {#each field.options as option (option.value)}
-                <option value={option.value}>{option.label}</option>
-              {/each}
-            </select>
-          {:else if field.type === 'boolean'}
-            {@const rawValue = params[field.key]}
-            {@const checkedValue = typeof rawValue === 'boolean' ? rawValue : field.default}
-            <input
-              type="checkbox"
-              checked={checkedValue}
-              onchange={(event) => {
-                updateParamValue(field.key, event.currentTarget.checked);
-              }}
-            />
-          {:else if field.type === 'number-range'}
-            {@const currentRange =
-              typeof params[field.key] === 'object' && params[field.key] !== null
-                ? (params[field.key] as { min: number; max: number })
-                : field.default}
-            <div class="range-pair">
+                {#each field.options as option (option.value)}
+                  <option value={option.value}>{option.label}</option>
+                {/each}
+              </select>
+            {:else if field.type === 'boolean'}
+              {@const rawValue = params[field.key]}
+              {@const checkedValue = typeof rawValue === 'boolean' ? rawValue : field.default}
               <input
-                type="number"
-                value={currentRange.min}
-                oninput={(event) => {
-                  updateParamValue(field.key, {
-                    ...currentRange,
-                    min: Number(event.currentTarget.value),
-                  });
+                type="checkbox"
+                checked={checkedValue}
+                onchange={(event) => {
+                  updateParamValue(field.key, event.currentTarget.checked);
                 }}
-                min={field.min}
-                max={field.max}
-                step={field.step}
               />
-              <span class="range-pair-sep">to</span>
-              <input
-                type="number"
-                value={currentRange.max}
-                oninput={(event) => {
-                  updateParamValue(field.key, {
-                    ...currentRange,
-                    max: Number(event.currentTarget.value),
-                  });
-                }}
-                min={field.min}
-                max={field.max}
-                step={field.step}
-              />
-            </div>
-          {/if}
-        </label>
+            {:else if field.type === 'number-range'}
+              {@const currentRange =
+                typeof params[field.key] === 'object' && params[field.key] !== null
+                  ? (params[field.key] as { min: number; max: number })
+                  : field.default}
+              <div class="range-pair">
+                <input
+                  type="number"
+                  value={currentRange.min}
+                  oninput={(event) => {
+                    updateParamValue(field.key, {
+                      ...currentRange,
+                      min: Number(event.currentTarget.value),
+                    });
+                  }}
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                />
+                <span class="range-pair-sep">to</span>
+                <input
+                  type="number"
+                  value={currentRange.max}
+                  oninput={(event) => {
+                    updateParamValue(field.key, {
+                      ...currentRange,
+                      max: Number(event.currentTarget.value),
+                    });
+                  }}
+                  min={field.min}
+                  max={field.max}
+                  step={field.step}
+                />
+              </div>
+            {/if}
+          </label>
+        {/if}
       {/each}
 
       <button class="run-btn" onclick={runActiveCommand}>Apply</button>

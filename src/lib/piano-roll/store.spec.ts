@@ -110,15 +110,20 @@ describe('CommandHistory', () => {
   });
 
   it('canUndo becomes true after record()', () => {
-    history.record('Test', () => ({ notes: [], scaleEvents: [] }));
+    history.record('Test', () => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+    }));
     expect(history.canUndo).toBe(true);
   });
 
   it('record() clears the redo stack', () => {
-    history.record('A', () => ({ notes: [], scaleEvents: [] }));
-    history.undo(() => ({ notes: [], scaleEvents: [] }));
+    history.record('A', () => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
+    history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
     expect(history.canRedo).toBe(true);
-    history.record('B', () => ({ notes: [], scaleEvents: [] }));
+    history.record('B', () => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
     expect(history.canRedo).toBe(false);
   });
 
@@ -126,9 +131,16 @@ describe('CommandHistory', () => {
     const snap = {
       notes: [{ id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 }],
       scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
     };
     history.record('Transpose', () => snap);
-    const entry = history.undo(() => ({ notes: [], scaleEvents: [] }));
+    const entry = history.undo(() => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+    }));
     expect(entry?.label).toBe('Transpose');
     expect(entry?.notes).toEqual(snap.notes);
     expect(history.canUndo).toBe(false);
@@ -136,39 +148,70 @@ describe('CommandHistory', () => {
   });
 
   it('redo() returns the snapshot and restores canUndo', () => {
-    history.record('Move', () => ({ notes: [], scaleEvents: [] }));
-    history.undo(() => ({ notes: [], scaleEvents: [] }));
-    const entry = history.redo(() => ({ notes: [], scaleEvents: [] }));
+    history.record('Move', () => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+    }));
+    history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
+    const entry = history.redo(() => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+    }));
     expect(entry?.label).toBe('Move');
     expect(history.canRedo).toBe(false);
     expect(history.canUndo).toBe(true);
   });
 
   it('undo() returns undefined when stack is empty', () => {
-    expect(history.undo(() => ({ notes: [], scaleEvents: [] }))).toBeUndefined();
+    expect(
+      history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] })),
+    ).toBeUndefined();
   });
 
   it('redo() returns undefined when stack is empty', () => {
-    expect(history.redo(() => ({ notes: [], scaleEvents: [] }))).toBeUndefined();
+    expect(
+      history.redo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] })),
+    ).toBeUndefined();
   });
 
   it('trims undo stack to maxDepth (50)', () => {
     for (let i = 0; i < 55; i++) {
-      history.record(`Step ${String(i)}`, () => ({ notes: [], scaleEvents: [] }));
+      history.record(`Step ${String(i)}`, () => ({
+        notes: [],
+        scaleEvents: [],
+        chordEvents: [],
+        labelEvents: [],
+      }));
     }
     // pop 50 times — should all succeed
     for (let i = 0; i < 50; i++) {
-      const entry = history.undo(() => ({ notes: [], scaleEvents: [] }));
+      const entry = history.undo(() => ({
+        notes: [],
+        scaleEvents: [],
+        chordEvents: [],
+        labelEvents: [],
+      }));
       expect(entry).toBeDefined();
     }
     // 51st pop must return undefined (stack was trimmed to 50)
-    expect(history.undo(() => ({ notes: [], scaleEvents: [] }))).toBeUndefined();
+    expect(
+      history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] })),
+    ).toBeUndefined();
   });
 
   it('exposes undoLabel and redoLabel', () => {
-    history.record('First', () => ({ notes: [], scaleEvents: [] }));
+    history.record('First', () => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+    }));
     expect(history.undoLabel).toBe('First');
-    history.undo(() => ({ notes: [], scaleEvents: [] }));
+    history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
     expect(history.redoLabel).toBe('First');
   });
 });
@@ -388,7 +431,7 @@ describe('createStore — selectionContext', () => {
 // ── createStore — commandContext ──────────────────────────────────────────────
 
 describe('createStore — commandContext', () => {
-  it('extends selectionContext with allNotes, playhead, and an empty chordTrack stub', () => {
+  it('extends selectionContext with allNotes, playhead, and chordTrack (empty until a chord marker is added)', () => {
     const store = createStore();
     store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
     store.addNote({ id: 'b', midiNote: 64, startBeat: 1, durationBeats: 1, velocity: 100 });
@@ -745,6 +788,132 @@ describe('createStore — scale track', () => {
   it('selectionContext.activeScales is empty when nothing is selected', () => {
     const store = createStore();
     expect(store.selectionContext.activeScales).toEqual([]);
+  });
+});
+
+describe('createStore — chord track', () => {
+  it('starts empty — unlike the scale track, there is no sensible default chord', () => {
+    const store = createStore();
+    expect(store.chordTrack).toEqual([]);
+  });
+
+  it('upsertChordEvent adds a new marker and records history', () => {
+    const store = createStore();
+    store.upsertChordEvent({ id: 'c1', beat: 0, root: 0, quality: 'maj7' });
+    expect(store.chordTrack).toHaveLength(1);
+    expect(store.chordTrack[0]).toEqual({ id: 'c1', beat: 0, root: 0, quality: 'maj7' });
+    expect(store.history.undoLabel).toBe('Set chord marker');
+  });
+
+  it('upsertChordEvent replaces an existing marker at the same beat instead of stacking', () => {
+    const store = createStore();
+    store.upsertChordEvent({ id: 'c1', beat: 0, root: 0, quality: 'maj' });
+    store.upsertChordEvent({ id: 'replacement', beat: 0, root: 7, quality: '7' });
+    expect(store.chordTrack).toHaveLength(1);
+    expect(store.chordTrack[0]).toEqual({ id: 'replacement', beat: 0, root: 7, quality: '7' });
+  });
+
+  it('removeChordEvent removes the marker and records history', () => {
+    const store = createStore();
+    store.upsertChordEvent({ id: 'c1', beat: 0, root: 0, quality: 'maj7' });
+    store.removeChordEvent('c1');
+    expect(store.chordTrack).toEqual([]);
+    expect(store.history.undoLabel).toBe('Remove chord marker');
+  });
+
+  it('undo restores a removed chord marker', () => {
+    const store = createStore();
+    store.upsertChordEvent({ id: 'c1', beat: 0, root: 0, quality: 'maj7' });
+    store.removeChordEvent('c1');
+    store.undo();
+    expect(store.chordTrack.some((e) => e.id === 'c1')).toBe(true);
+  });
+
+  it('moveChordEvent relocates a marker to a new beat, keeping its id/root/quality', () => {
+    const store = createStore();
+    store.upsertChordEvent({ id: 'c1', beat: 0, root: 0, quality: 'maj7' });
+    store.moveChordEvent('c1', 4);
+    expect(store.chordTrack[0]).toEqual({ id: 'c1', beat: 4, root: 0, quality: 'maj7' });
+    expect(store.history.undoLabel).toBe('Move chord marker');
+  });
+
+  it('moveChordEvent is a no-op (no history entry) when the beat is unchanged', () => {
+    const store = createStore();
+    store.upsertChordEvent({ id: 'c1', beat: 0, root: 0, quality: 'maj7' });
+    const undoLabelBefore = store.history.undoLabel;
+    store.moveChordEvent('c1', 0);
+    expect(store.history.undoLabel).toBe(undoLabelBefore);
+  });
+
+  it('moveChordEvent is a no-op for an unknown id', () => {
+    const store = createStore();
+    store.moveChordEvent('does-not-exist', 4);
+    expect(store.chordTrack).toEqual([]);
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('activeChordAt resolves the chord in effect at a given beat', () => {
+    const store = createStore();
+    store.upsertChordEvent({ id: 'c1', beat: 0, root: 0, quality: 'maj7' });
+    store.upsertChordEvent({ id: 'c2', beat: 8, root: 7, quality: '7' });
+    expect(store.activeChordAt(0)?.quality).toBe('maj7');
+    expect(store.activeChordAt(7.9)?.quality).toBe('maj7');
+    expect(store.activeChordAt(8)?.quality).toBe('7');
+  });
+
+  it('commandContext.chordTrack reflects the real chord track, not a stub', () => {
+    const store = createStore();
+    store.upsertChordEvent({ id: 'c1', beat: 0, root: 0, quality: 'maj7' });
+    expect(store.commandContext.chordTrack).toEqual([
+      { id: 'c1', beat: 0, root: 0, quality: 'maj7' },
+    ]);
+  });
+});
+
+describe('createStore — label track', () => {
+  it('starts empty', () => {
+    const store = createStore();
+    expect(store.labelTrack).toEqual([]);
+  });
+
+  it('upsertLabelEvent adds a new marker and records history', () => {
+    const store = createStore();
+    store.upsertLabelEvent({ id: 'l1', beat: 4, text: 'Solo starts here' });
+    expect(store.labelTrack).toHaveLength(1);
+    expect(store.labelTrack[0]).toEqual({ id: 'l1', beat: 4, text: 'Solo starts here' });
+    expect(store.history.undoLabel).toBe('Set label marker');
+  });
+
+  it('upsertLabelEvent replaces an existing marker at the same beat instead of stacking', () => {
+    const store = createStore();
+    store.upsertLabelEvent({ id: 'l1', beat: 4, text: 'Verse 2' });
+    store.upsertLabelEvent({ id: 'replacement', beat: 4, text: 'Chorus' });
+    expect(store.labelTrack).toHaveLength(1);
+    expect(store.labelTrack[0]).toEqual({ id: 'replacement', beat: 4, text: 'Chorus' });
+  });
+
+  it('removeLabelEvent removes the marker and records history', () => {
+    const store = createStore();
+    store.upsertLabelEvent({ id: 'l1', beat: 4, text: 'Solo starts here' });
+    store.removeLabelEvent('l1');
+    expect(store.labelTrack).toEqual([]);
+    expect(store.history.undoLabel).toBe('Remove label marker');
+  });
+
+  it('undo restores a removed label marker', () => {
+    const store = createStore();
+    store.upsertLabelEvent({ id: 'l1', beat: 4, text: 'Solo starts here' });
+    store.removeLabelEvent('l1');
+    store.undo();
+    expect(store.labelTrack.some((e) => e.id === 'l1')).toBe(true);
+  });
+
+  it('moveLabelEvent relocates a marker to a new beat, keeping its id/text', () => {
+    const store = createStore();
+    store.upsertLabelEvent({ id: 'l1', beat: 4, text: 'Solo starts here' });
+    store.moveLabelEvent('l1', 8);
+    expect(store.labelTrack[0]).toEqual({ id: 'l1', beat: 8, text: 'Solo starts here' });
+    expect(store.history.undoLabel).toBe('Move label marker');
   });
 });
 

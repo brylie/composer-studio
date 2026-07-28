@@ -1,15 +1,18 @@
 <script lang="ts">
   import type { Action } from 'svelte/action';
+  import ChordEventEditor from './ChordEventEditor.svelte';
   import { getEditorState } from './context.svelte.js';
   const { store, ribbonUi } = getEditorState();
   import CommandRibbon from './CommandRibbon.svelte';
+  import { createLaneEditor } from './lane-editor.svelte.js';
   import EventTrackLane from './EventTrackLane.svelte';
+  import LabelEventEditor from './LabelEventEditor.svelte';
   import NoteGrid from './NoteGrid.svelte';
   import OverlayShell from './OverlayShell.svelte';
   import PianoKeys from './PianoKeys.svelte';
   import ScaleEventEditor from './ScaleEventEditor.svelte';
   import SynthPanel from './SynthPanel.svelte';
-  import type { ScaleEvent } from './timeline.js';
+  import type { ChordEvent, LabelEvent, ScaleEvent } from './timeline.js';
   import Toolbar from './Toolbar.svelte';
   import TopBar from './TopBar.svelte';
   import { MAX_MIDI, NOTE_NAMES } from './types.js';
@@ -19,38 +22,52 @@
 
   const rulerWidth = $derived(store.totalBeats * store.pixelsPerBeat);
 
-  // ── Scale lane (tracks.md) ──────────────────────────────────────────────
+  // ── Event track lanes (tracks.md#shared-lane-component) ─────────────────
+  // Stacked scale → chord → labels, per tracks.md's fixed lane order. Each
+  // lane owns a createLaneEditor controller (lane-editor.svelte.ts) rather
+  // than a bespoke open/save/delete/move quartet per track type — the three
+  // lanes below would otherwise be near-identical copies of the same wiring.
   const RULER_HEIGHT = 24;
   const SCALE_LANE_HEIGHT = 26;
+  const CHORD_LANE_HEIGHT = 26;
+  const LABELS_LANE_HEIGHT = 26;
 
-  interface ScaleEditorTarget {
-    beat: number;
-    existing: ScaleEvent | null;
-  }
-  let scaleEditorTarget: ScaleEditorTarget | null = $state(null);
-
-  function openScaleEditorAt(beat: number) {
-    const existing = store.scaleTrack.find((e) => e.beat === beat) ?? null;
-    scaleEditorTarget = { beat, existing };
-  }
-
-  function openScaleEditorFor(event: ScaleEvent) {
-    scaleEditorTarget = { beat: event.beat, existing: event };
-  }
-
-  function saveScaleEvent(event: ScaleEvent) {
-    store.upsertScaleEvent(event);
-    scaleEditorTarget = null;
-  }
-
-  function deleteScaleEvent(id: string) {
-    store.removeScaleEvent(id);
-    scaleEditorTarget = null;
-  }
-
-  function moveScaleEvent(event: ScaleEvent, beat: number) {
-    store.moveScaleEvent(event.id, beat);
-  }
+  const scaleLane = createLaneEditor<ScaleEvent>(
+    () => store.scaleTrack,
+    (event) => {
+      store.upsertScaleEvent(event);
+    },
+    (id) => {
+      store.removeScaleEvent(id);
+    },
+    (id, beat) => {
+      store.moveScaleEvent(id, beat);
+    },
+  );
+  const chordLane = createLaneEditor<ChordEvent>(
+    () => store.chordTrack,
+    (event) => {
+      store.upsertChordEvent(event);
+    },
+    (id) => {
+      store.removeChordEvent(id);
+    },
+    (id, beat) => {
+      store.moveChordEvent(id, beat);
+    },
+  );
+  const labelLane = createLaneEditor<LabelEvent>(
+    () => store.labelTrack,
+    (event) => {
+      store.upsertLabelEvent(event);
+    },
+    (id) => {
+      store.removeLabelEvent(id);
+    },
+    (id, beat) => {
+      store.moveLabelEvent(id, beat);
+    },
+  );
 
   // Derived playhead X position — null when not playing (disables auto-scroll)
   const autoScrollX = $derived(store.isPlaying ? store.currentBeat * store.pixelsPerBeat : null);
@@ -151,7 +168,7 @@
       <div class="scroll-area" use:scrollAreaAction={autoScrollX}>
         <div
           class="scroll-content"
-          style="width: max-content; min-height: 100%; grid-template-rows: {RULER_HEIGHT}px {SCALE_LANE_HEIGHT}px auto;"
+          style="width: max-content; min-height: 100%; grid-template-rows: {RULER_HEIGHT}px {SCALE_LANE_HEIGHT}px {CHORD_LANE_HEIGHT}px {LABELS_LANE_HEIGHT}px auto;"
         >
           <!-- Top-left corner (aligned with ruler) -->
           <div class="corner-spacer" style="position: sticky; left: 0; z-index: 30;"></div>
@@ -178,16 +195,57 @@
             row={2}
             stickyTop={RULER_HEIGHT}
             height={SCALE_LANE_HEIGHT}
-            onAddAt={openScaleEditorAt}
-            onSelect={openScaleEditorFor}
-            onMove={moveScaleEvent}
+            onAddAt={scaleLane.openAt}
+            onSelect={scaleLane.openFor}
+            onMove={scaleLane.move}
           >
             {#snippet marker(event: ScaleEvent)}
               {NOTE_NAMES[event.root]} {event.mode}
             {/snippet}
           </EventTrackLane>
 
-          <!-- Third row: piano keys + note grid -->
+          <!-- Chord lane (tracks.md#chord-track-placeholder) — same lane
+               component, one row below the scale lane per the fixed stacking
+               order (scale, then chord, then labels). -->
+          <EventTrackLane
+            label="Chord"
+            events={store.chordTrack}
+            pixelsPerBeat={store.pixelsPerBeat}
+            totalBeats={store.totalBeats}
+            snapBeats={store.snapBeats}
+            row={3}
+            stickyTop={RULER_HEIGHT + SCALE_LANE_HEIGHT}
+            height={CHORD_LANE_HEIGHT}
+            onAddAt={chordLane.openAt}
+            onSelect={chordLane.openFor}
+            onMove={chordLane.move}
+          >
+            {#snippet marker(event: ChordEvent)}
+              {NOTE_NAMES[event.root]}{event.quality}
+            {/snippet}
+          </EventTrackLane>
+
+          <!-- Labels lane (tracks.md#labels-track-placeholder) — freeform
+               point annotations, placed just above the note grid. -->
+          <EventTrackLane
+            label="Labels"
+            events={store.labelTrack}
+            pixelsPerBeat={store.pixelsPerBeat}
+            totalBeats={store.totalBeats}
+            snapBeats={store.snapBeats}
+            row={4}
+            stickyTop={RULER_HEIGHT + SCALE_LANE_HEIGHT + CHORD_LANE_HEIGHT}
+            height={LABELS_LANE_HEIGHT}
+            onAddAt={labelLane.openAt}
+            onSelect={labelLane.openFor}
+            onMove={labelLane.move}
+          >
+            {#snippet marker(event: LabelEvent)}
+              {event.text}
+            {/snippet}
+          </EventTrackLane>
+
+          <!-- Piano keys + note grid -->
           <div class="grid-row">
             <!-- Piano keys: sticky left -->
             <PianoKeys />
@@ -240,17 +298,35 @@
     <SynthPanel />
   </OverlayShell>
 
-  <OverlayShell
-    open={scaleEditorTarget !== null}
-    title="Scale marker"
-    onclose={() => (scaleEditorTarget = null)}
-  >
-    {#if scaleEditorTarget}
+  <OverlayShell open={scaleLane.target !== null} title="Scale marker" onclose={scaleLane.close}>
+    {#if scaleLane.target}
       <ScaleEventEditor
-        beat={scaleEditorTarget.beat}
-        existing={scaleEditorTarget.existing}
-        onSave={saveScaleEvent}
-        onDelete={deleteScaleEvent}
+        beat={scaleLane.target.beat}
+        existing={scaleLane.target.existing}
+        onSave={scaleLane.save}
+        onDelete={scaleLane.delete}
+      />
+    {/if}
+  </OverlayShell>
+
+  <OverlayShell open={chordLane.target !== null} title="Chord marker" onclose={chordLane.close}>
+    {#if chordLane.target}
+      <ChordEventEditor
+        beat={chordLane.target.beat}
+        existing={chordLane.target.existing}
+        onSave={chordLane.save}
+        onDelete={chordLane.delete}
+      />
+    {/if}
+  </OverlayShell>
+
+  <OverlayShell open={labelLane.target !== null} title="Label marker" onclose={labelLane.close}>
+    {#if labelLane.target}
+      <LabelEventEditor
+        beat={labelLane.target.beat}
+        existing={labelLane.target.existing}
+        onSave={labelLane.save}
+        onDelete={labelLane.delete}
       />
     {/if}
   </OverlayShell>
@@ -308,8 +384,10 @@
     display: grid;
     /* col 1: piano key width (sticky), col 2: rest */
     grid-template-columns: 64px 1fr;
-    /* row 1: ruler, row 2: scale lane (tracks.md), row 3: piano keys + note grid —
-       heights set inline from RULER_HEIGHT/SCALE_LANE_HEIGHT to keep this in sync. */
+    /* row 1: ruler, row 2: scale lane, row 3: chord lane, row 4: labels lane
+       (tracks.md's fixed stacking order), row 5: piano keys + note grid —
+       heights set inline from RULER_HEIGHT/SCALE_LANE_HEIGHT/CHORD_LANE_HEIGHT/
+       LABELS_LANE_HEIGHT to keep this in sync. */
   }
 
   /* ── Corner spacer ── */
@@ -347,7 +425,7 @@
   /* ── Grid row: piano keys + note grid ── */
   .grid-row {
     grid-column: 1 / -1;
-    grid-row: 3;
+    grid-row: 5;
     display: flex;
     align-items: flex-start;
   }

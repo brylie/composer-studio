@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getEditorState } from './context.svelte.js';
   const { store } = getEditorState();
-  import { pitchClassesForScaleEvent } from '../music-theory/index.js';
+  import { pitchClassesForChordEvent, pitchClassesForScaleEvent } from '../music-theory/index.js';
   import { auditionNote } from './audio.js';
   import { isBlackKey, noteName, MAX_MIDI, NOTE_COUNT } from './types.js';
 
@@ -14,6 +14,13 @@
   const scaleDegrees = $derived.by(() => {
     const active = store.activeScaleAt(store.currentBeat);
     return active ? pitchClassesForScaleEvent(active.root, active.mode) : new Set<number>();
+  });
+
+  // Chord-tone highlighting mirrors the scale-degree one above, using the
+  // chord active at the same single playhead position (tracks.md).
+  const chordTones = $derived.by(() => {
+    const active = store.activeChordAt(store.currentBeat);
+    return active ? pitchClassesForChordEvent(active.root, active.quality) : new Set<number>();
   });
 
   const activeNotes = $derived(
@@ -42,12 +49,16 @@
     {@const isC = midi % 12 === 0}
     {@const active = activeNotes.has(midi)}
     {@const inScale = scaleDegrees.has(midi % 12)}
+    {@const inChord = chordTones.has(midi % 12)}
+    {@const isTension = inChord && !inScale}
     <button
       class="key"
       class:black-key={black}
       class:white-key={!black}
       class:c-note={isC}
       class:in-scale={inScale}
+      class:in-chord={inChord}
+      class:tension={isTension}
       class:active
       style="height: {store.rowHeight}px;"
       onclick={() => {
@@ -97,6 +108,17 @@
   /* ── In-scale highlighting at the playhead (tracks.md) — advisory only ── */
   .key.in-scale {
     box-shadow: inset 3px 0 0 var(--color-scale-degree, #38bdf8);
+  }
+
+  /* ── Chord-tone highlighting (tracks.md) — layered on top of in-scale via a
+     thicker inset, so a chord tone stands out from a merely-in-scale key.
+     A tension tone (outside the active scale) gets a distinct color. ── */
+  .key.in-chord {
+    box-shadow: inset 5px 0 0 var(--color-chord-tone, #facc15);
+  }
+
+  .key.in-chord.tension {
+    box-shadow: inset 5px 0 0 var(--color-chord-tension, #fb7185);
   }
 
   .key.active,
