@@ -81,9 +81,15 @@ via the same shared `PolySynth`.
 
 ### Stopping playback
 
-`Transport.stop()` halts the scheduler and playhead; `PolySynth.releaseAll()`
-immediately silences any already-triggered voices so stopping mid-note can't
-leave a stuck tone ringing — the original hand-rolled scheduler had no
+`Transport.stop()` halts the scheduler and playhead. `PolySynth.releaseAll()`
+alone isn't enough for immediate silence — it still runs the configured
+release envelope (up to 4s, per the Sound drawer's Release slider), and it
+can't un-sound attacks already scheduled inside the 100ms lookahead window.
+Instead, `stopPlayback()` disposes the shared `PolySynth` outright for a hard
+cutoff, and clears the cached "last applied settings"/filter-routing state so
+`getPiano()`/`applySettings()` lazily recreate and fully reconfigure a fresh
+instrument (oscillator, envelope, volume, filter routing) the next time a
+note is triggered or auditioned — the original hand-rolled scheduler had no
 equivalent, since once `osc.start(t)`/`osc.stop(t)` were scheduled on the raw
 `AudioContext` they couldn't be un-scheduled.
 

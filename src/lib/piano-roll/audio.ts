@@ -12,6 +12,8 @@ import { midiToFreq } from './types.js';
 let _piano: Tone.PolySynth | null = null;
 let _filter: Tone.Filter | null = null;
 let _filterEnabled = false;
+/** Last settings fully applied to the shared instrument, so unchanged settings can be skipped. Reset to null whenever the instrument is recreated. */
+let _lastSettings: SynthSettings | null = null;
 
 function getPiano(): { piano: Tone.PolySynth; filter: Tone.Filter } {
   if (!_piano || !_filter) {
@@ -23,13 +25,43 @@ function getPiano(): { piano: Tone.PolySynth; filter: Tone.Filter } {
 
 function applySettings(settings: SynthSettings): void {
   const { piano, filter } = getPiano();
-  piano.set({
-    oscillator: { type: settings.waveform },
-    envelope: settings.envelope,
-  });
-  piano.volume.value = Tone.gainToDb(Math.max(0.0001, settings.volume / 100));
-  filter.frequency.value = settings.filter.cutoff;
-  filter.Q.value = settings.filter.resonance;
+  const last = _lastSettings;
+
+  if (
+    last !== null &&
+    last.waveform === settings.waveform &&
+    last.volume === settings.volume &&
+    last.envelope.attack === settings.envelope.attack &&
+    last.envelope.decay === settings.envelope.decay &&
+    last.envelope.sustain === settings.envelope.sustain &&
+    last.envelope.release === settings.envelope.release &&
+    last.filter.cutoff === settings.filter.cutoff &&
+    last.filter.resonance === settings.filter.resonance &&
+    settings.filter.enabled === _filterEnabled
+  ) {
+    return;
+  }
+
+  if (last?.waveform !== settings.waveform) {
+    piano.set({ oscillator: { type: settings.waveform } });
+  }
+  if (
+    last?.envelope.attack !== settings.envelope.attack ||
+    last.envelope.decay !== settings.envelope.decay ||
+    last.envelope.sustain !== settings.envelope.sustain ||
+    last.envelope.release !== settings.envelope.release
+  ) {
+    piano.set({ envelope: settings.envelope });
+  }
+  if (last?.volume !== settings.volume) {
+    piano.volume.value = Tone.gainToDb(Math.max(0.0001, settings.volume / 100));
+  }
+  if (last?.filter.cutoff !== settings.filter.cutoff) {
+    filter.frequency.value = settings.filter.cutoff;
+  }
+  if (last?.filter.resonance !== settings.filter.resonance) {
+    filter.Q.value = settings.filter.resonance;
+  }
 
   if (settings.filter.enabled !== _filterEnabled) {
     _filterEnabled = settings.filter.enabled;
@@ -40,6 +72,8 @@ function applySettings(settings: SynthSettings): void {
       piano.toDestination();
     }
   }
+
+  _lastSettings = settings;
 }
 
 export function triggerNote(
@@ -189,7 +223,17 @@ export function stopPlayback(): void {
   }
   transport.off('loop', handleTransportLoop);
   transport.stop();
-  _piano?.releaseAll();
+
+  // releaseAll() follows the configured release envelope (up to 4s, per the
+  // Sound drawer), so it can't guarantee immediate silence — including for
+  // attacks already scheduled inside the lookahead window. Disposing the
+  // shared instrument forces a hard cutoff regardless of envelope/schedule;
+  // getPiano()/applySettings() lazily recreate and fully reconfigure it
+  // (oscillator, envelope, volume, filter routing) on the next trigger.
+  _piano?.dispose();
+  _piano = null;
+  _filterEnabled = false;
+  _lastSettings = null;
 
   if (_rafId !== null) {
     cancelAnimationFrame(_rafId);
