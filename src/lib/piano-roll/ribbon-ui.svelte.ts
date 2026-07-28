@@ -16,7 +16,8 @@ export function createRibbonUiState(): RibbonUiState {
   // Starts open on every render path (SSR and the client's first hydration
   // pass) to keep the initial markup identical; the client-only effect below
   // narrows it to the mobile default once `window` is available. $derived
-  // (rather than $state) so the manual toggle button can still reassign it.
+  // rather than $state to satisfy svelte/prefer-writable-derived for this
+  // state-set-only-in-an-effect shape.
   let ribbonOpen = $derived(true);
   let paramsDrawerOpen = $state(false);
   let soundDrawerOpen = $state(false);

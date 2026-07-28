@@ -1,6 +1,6 @@
 <script lang="ts">
   import { MediaQuery } from 'svelte/reactivity';
-  import { COMMAND_LABELS } from './command-labels.js';
+  import { COMMAND_LABELS } from './command-metadata.js';
   import { commandRegistry } from './commands/index.js';
   import type { CommandDescriptor } from './commands/types.js';
   import { getEditorState } from './context.svelte.js';
@@ -20,9 +20,8 @@
   let activeCommandId = $state<string | null>(null);
   let params = $state<Record<string, unknown>>({});
 
-  const commandsById = $derived(new Map(commandRegistry.map((c) => [c.id, c])));
   const activeCommand = $derived(
-    activeCommandId ? (commandsById.get(activeCommandId) ?? null) : null,
+    activeCommandId ? (commandRegistry.find((c) => c.id === activeCommandId) ?? null) : null,
   );
 
   function updateParamValue(fieldKey: string, value: unknown) {

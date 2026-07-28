@@ -31,26 +31,14 @@
       groups: [{ id: 'harmony', label: 'Harmony', commandIds: ['generate-chords'] }],
     },
   ];
-
-  const COMMAND_DESCRIPTIONS: Record<string, string> = {
-    transpose: 'Shift pitch by semitones',
-    retrograde: 'Reverse note order in time',
-    invert: 'Mirror pitch around a center note',
-    augmentation: 'Stretch note durations',
-    diminution: 'Shrink note durations',
-    permutation: 'Reorder selected notes',
-    jitter: 'Randomize timing and pitch slightly',
-    'generate-chords': 'Generate voice-led chords from the selection',
-  };
-
-  const DISABLED_REASON_TEXT: Record<string, string> = {
-    'commands.disabled.selectAtLeastOne': 'Select at least one note',
-    'commands.disabled.selectAtLeastTwo': 'Select at least two notes',
-  };
 </script>
 
 <script lang="ts">
-  import { COMMAND_LABELS } from './command-labels.js';
+  import {
+    COMMAND_DESCRIPTIONS,
+    COMMAND_LABELS,
+    DISABLED_REASON_TEXT,
+  } from './command-metadata.js';
   import { commandRegistry } from './commands/index.js';
   import type { CommandDescriptor } from './commands/types.js';
   import { getEditorState } from './context.svelte.js';
