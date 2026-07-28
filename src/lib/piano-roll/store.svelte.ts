@@ -1,4 +1,13 @@
 import { SvelteSet } from 'svelte/reactivity';
+import type { ArrangerTrack } from './arranger.js';
+import {
+  addSectionAt,
+  moveSection,
+  removeSection as removeArrangerSectionFromTrack,
+  resizeSectionEnd,
+  resizeSectionStart,
+  updateSection,
+} from './arranger.js';
 import { commandRegistry } from './commands/index.js';
 import { CommandHistory, isContiguous } from './history.js';
 import type {
@@ -118,6 +127,9 @@ export function createStore() {
   // sensible default marker to seed (tracks.md's chord/labels tracks).
   let chordTrack: ChordTrack = $state([]);
   let labelTrack: LabelTrack = $state([]);
+  // Arranger track (tracks.md#arranger-track-placeholder) — starts empty,
+  // same reasoning as chord/labels above.
+  let arrangerTrack: ArrangerTrack = $state([]);
 
   // Selection
   const selectedNoteIds = new SvelteSet<string>();
@@ -219,6 +231,7 @@ export function createStore() {
       scaleEvents: $state.snapshot(scaleTrack),
       chordEvents: $state.snapshot(chordTrack),
       labelEvents: $state.snapshot(labelTrack),
+      arrangerSections: $state.snapshot(arrangerTrack),
     };
   }
 
@@ -418,6 +431,56 @@ export function createStore() {
     { upsert: 'Set label marker', remove: 'Remove label marker', move: 'Move label marker' },
   );
 
+  // ── Arranger track (tracks.md#arranger-track-placeholder) ────────────────
+  // Sections span a range rather than a single beat, so they can't reuse
+  // createEventTrackMutators above (built for TimelineEvent's beat-keyed
+  // collision rule) — each mutator here delegates to arranger.ts's
+  // gap-clamping domain functions, only recording history when the result
+  // actually differs (those functions return the same array reference for a
+  // no-op edit, e.g. dragging a section onto itself).
+
+  function addArrangerSection(beat: number) {
+    const next = addSectionAt(arrangerTrack, Math.max(0, beat), totalBeats);
+    if (next === arrangerTrack) return;
+    recordHistory('Add section');
+    arrangerTrack = next;
+  }
+
+  function moveArrangerSection(id: string, beat: number) {
+    const next = moveSection(arrangerTrack, id, beat, totalBeats);
+    if (next === arrangerTrack) return;
+    recordHistory('Move section');
+    arrangerTrack = next;
+  }
+
+  function resizeArrangerSectionStart(id: string, beat: number) {
+    const next = resizeSectionStart(arrangerTrack, id, beat);
+    if (next === arrangerTrack) return;
+    recordHistory('Resize section');
+    arrangerTrack = next;
+  }
+
+  function resizeArrangerSectionEnd(id: string, beat: number) {
+    const next = resizeSectionEnd(arrangerTrack, id, beat, totalBeats);
+    if (next === arrangerTrack) return;
+    recordHistory('Resize section');
+    arrangerTrack = next;
+  }
+
+  function updateArrangerSection(id: string, updates: { label: string; color: string }) {
+    const next = updateSection(arrangerTrack, id, updates);
+    if (next === arrangerTrack) return;
+    recordHistory('Rename section');
+    arrangerTrack = next;
+  }
+
+  function removeArrangerSection(id: string) {
+    const next = removeArrangerSectionFromTrack(arrangerTrack, id);
+    if (next === arrangerTrack) return;
+    recordHistory('Remove section');
+    arrangerTrack = next;
+  }
+
   // ── Undo / Redo ───────────────────────────────────────────────────────────
 
   /** After restoring `notes` from a history entry, drop selection ids that no longer exist. */
@@ -437,6 +500,7 @@ export function createStore() {
     scaleTrack = entry.scaleEvents;
     chordTrack = entry.chordEvents;
     labelTrack = entry.labelEvents;
+    arrangerTrack = entry.arrangerSections;
     pruneSelectionToExistingNotes();
   }
 
@@ -448,6 +512,7 @@ export function createStore() {
     scaleTrack = entry.scaleEvents;
     chordTrack = entry.chordEvents;
     labelTrack = entry.labelEvents;
+    arrangerTrack = entry.arrangerSections;
     pruneSelectionToExistingNotes();
   }
 
@@ -577,6 +642,10 @@ export function createStore() {
       return labelTrack;
     },
 
+    get arrangerTrack() {
+      return arrangerTrack;
+    },
+
     get barBeats() {
       return barBeatPositions;
     },
@@ -687,6 +756,12 @@ export function createStore() {
     upsertLabelEvent: labelTrackMutators.upsert,
     removeLabelEvent: labelTrackMutators.remove,
     moveLabelEvent: labelTrackMutators.move,
+    addArrangerSection,
+    moveArrangerSection,
+    resizeArrangerSectionStart,
+    resizeArrangerSectionEnd,
+    updateArrangerSection,
+    removeArrangerSection,
   };
 }
 

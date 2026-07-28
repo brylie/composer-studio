@@ -121,6 +121,14 @@ export const generateChords: CommandDescriptor<GenerateChordsParams> = {
       min: 0,
       max: 256,
       default: { min: 0, max: 4 },
+      // Seeds the drawer relative to the current playhead rather than
+      // always {0, 4} — matches run()'s own fallback in segmentChordTrack,
+      // so opening the drawer from the ribbon doesn't silently pin every
+      // run to beat 0.
+      getDefault: (ctx) => ({
+        min: ctx.playhead,
+        max: ctx.playhead + DEFAULT_TARGET_SPAN_BEATS,
+      }),
       showIf: (values) => values.source === 'chord-track',
     },
   ],

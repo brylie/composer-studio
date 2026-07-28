@@ -35,7 +35,13 @@
     }
 
     activeCommandId = command.id;
-    params = Object.fromEntries((command.params ?? []).map((field) => [field.key, field.default]));
+    const ctx = store.commandContext;
+    params = Object.fromEntries(
+      (command.params ?? []).map((field) => [
+        field.key,
+        field.getDefault ? field.getDefault(ctx) : field.default,
+      ]),
+    );
     ribbonUi.paramsDrawerOpen = true;
     if (isMobile.current) ribbonUi.ribbonOpen = false;
   }
