@@ -8,6 +8,7 @@ export interface RibbonUiState {
   ribbonOpen: boolean;
   paramsDrawerOpen: boolean;
   soundDrawerOpen: boolean;
+  layerPanelOpen: boolean;
   previewMode: boolean;
 }
 
@@ -21,6 +22,7 @@ export function createRibbonUiState(): RibbonUiState {
   let ribbonOpen = $derived(true);
   let paramsDrawerOpen = $state(false);
   let soundDrawerOpen = $state(false);
+  let layerPanelOpen = $state(false);
   let previewMode = $state(false);
 
   // $effect bodies never run during SSR, so `window` is safely available here.
@@ -60,6 +62,12 @@ export function createRibbonUiState(): RibbonUiState {
     },
     set soundDrawerOpen(value) {
       soundDrawerOpen = value;
+    },
+    get layerPanelOpen() {
+      return layerPanelOpen;
+    },
+    set layerPanelOpen(value) {
+      layerPanelOpen = value;
     },
     get previewMode() {
       return previewMode;

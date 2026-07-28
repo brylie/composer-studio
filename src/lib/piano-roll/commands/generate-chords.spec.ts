@@ -52,6 +52,22 @@ describe('generateChords', () => {
     expect(result.label).toBe('Generate chords');
   });
 
+  it('assigns generated chord notes to ctx.activeLayerId (layers.md)', () => {
+    const melody = [makeNote({ id: 'm1', startBeat: 0, durationBeats: 1, midiNote: 60 })];
+    const ctx = makeCommandContext(melody, new Set(['m1']), { activeLayerId: 'layer-strings' });
+    const result = runCommand(generateChords, ctx, {
+      octaveRange: { min: 3, max: 5 },
+      voiceCount: 3,
+      voicingStrategy: 'smooth-voice-leading',
+      source: 'selection-derived',
+    });
+    const chordNotes = result.notes.filter((n) => n.id !== 'm1');
+    expect(chordNotes.length).toBeGreaterThan(0);
+    for (const n of chordNotes) {
+      expect(n.layerId).toBe('layer-strings');
+    }
+  });
+
   it('voices each beat segment within the requested voiceCount and octave range', () => {
     const melody = [makeNote({ id: 'm1', startBeat: 0, durationBeats: 2, midiNote: 60 })];
     const ctx = makeCommandContext(melody, new Set(['m1']));

@@ -167,6 +167,7 @@ export const generateChords: CommandDescriptor<GenerateChordsParams> = {
             startBeat: segment.startBeat,
             durationBeats: Math.max(segment.endBeat - segment.startBeat, 1 / 64),
             velocity: DEFAULT_VELOCITY,
+            layerId: ctx.activeLayerId,
           }),
         );
       }

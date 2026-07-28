@@ -76,6 +76,36 @@
       { tag: 'path', d: 'M4 5.5L6.5 8L9 5.5' },
       { tag: 'path', d: 'M1.5 9V11.5H11.5V9' },
     ],
+    // Three stacked diamonds (a common "layers" glyph), offset to read as a
+    // z-order stack rather than three separate rhombi.
+    layers: [
+      { tag: 'path', d: 'M6.5 1.5L11.5 4.5L6.5 7.5L1.5 4.5Z' },
+      { tag: 'path', d: 'M1.5 7L6.5 10L11.5 7' },
+      { tag: 'path', d: 'M1.5 9.5L6.5 12.5L11.5 9.5' },
+    ],
+    lock: [
+      { tag: 'rect', x: 2.5, y: 6, width: 8, height: 5.5, rx: 1 },
+      { tag: 'path', d: 'M4 6V4A2.5 2.5 0 0 1 9 4V6' },
+    ],
+    unlock: [
+      { tag: 'rect', x: 2.5, y: 6, width: 8, height: 5.5, rx: 1 },
+      { tag: 'path', d: 'M4 6V4A2.5 2.5 0 0 1 9 4' },
+    ],
+    plus: [
+      { tag: 'line', x1: 6.5, y1: 1.5, x2: 6.5, y2: 11.5 },
+      { tag: 'line', x1: 1.5, y1: 6.5, x2: 11.5, y2: 6.5 },
+    ],
+    trash: [
+      { tag: 'path', d: 'M2 3.5H11' },
+      { tag: 'path', d: 'M4.5 3.5V2.2A1 1 0 0 1 5.5 1.2H7.5A1 1 0 0 1 8.5 2.2V3.5' },
+      { tag: 'path', d: 'M3.5 3.5L4.1 11.2A1 1 0 0 0 5.1 12.1H7.9A1 1 0 0 0 8.9 11.2L9.5 3.5' },
+    ],
+    // Drag handle: three short horizontal lines.
+    grip: [
+      { tag: 'line', x1: 3, y1: 4, x2: 10, y2: 4 },
+      { tag: 'line', x1: 3, y1: 6.5, x2: 10, y2: 6.5 },
+      { tag: 'line', x1: 3, y1: 9, x2: 10, y2: 9 },
+    ],
   };
 </script>
 

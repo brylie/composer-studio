@@ -8,6 +8,7 @@ export function makeNote(overrides: Partial<Note> & { id: string }): Note {
     startBeat: 0,
     durationBeats: 1,
     velocity: 100,
+    layerId: 'layer-default',
     ...overrides,
   };
 }
@@ -20,7 +21,7 @@ export function makeNote(overrides: Partial<Note> & { id: string }): Note {
 export function makeCommandContext(
   allNotes: Note[],
   selectedIds: Set<string>,
-  overrides: Partial<Pick<CommandContext, 'playhead' | 'chordTrack'>> = {},
+  overrides: Partial<Pick<CommandContext, 'playhead' | 'chordTrack' | 'activeLayerId'>> = {},
 ): CommandContext {
   const selected = allNotes
     .filter((n) => selectedIds.has(n.id))
@@ -57,6 +58,7 @@ export function makeCommandContext(
     allNotes,
     playhead: overrides.playhead ?? 0,
     chordTrack: overrides.chordTrack ?? [],
+    activeLayerId: overrides.activeLayerId ?? 'layer-default',
   };
 }
 

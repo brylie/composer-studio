@@ -8,6 +8,7 @@ function makeNote(overrides: Partial<Parameters<typeof clampNote>[0]> = {}) {
     startBeat: 0,
     durationBeats: 1,
     velocity: 80,
+    layerId: 'layer-default',
     ...overrides,
   };
 }

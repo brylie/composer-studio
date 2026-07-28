@@ -7,6 +7,7 @@ export interface Note {
   startBeat: number;
   durationBeats: number;
   velocity: number;
+  layerId: string;
 }
 
 export interface Envelope {
@@ -28,6 +29,14 @@ export interface SynthSettings {
   envelope: Envelope;
   filter: FilterSettings;
 }
+
+/** Shared default instrument (libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth). */
+export const DEFAULT_SYNTH: SynthSettings = {
+  waveform: 'triangle',
+  volume: 90,
+  envelope: { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 },
+  filter: { enabled: false, cutoff: 2000, resonance: 1 },
+};
 
 export type SnapDenominator = 1 | 2 | 4 | 8 | 16;
 
@@ -120,12 +129,31 @@ export interface ActiveScaleSegment {
   end: number; // beats — likewise clamped
 }
 
-// Stub for Phase 10 (layers) ─────────────────────────────────────────────
+// ── Layers (layers.md) ──────────────────────────────────────────────────
 
 export interface Layer {
-  // Placeholder — real implementation in Phase 10
   id: string;
+  name: string;
+  instrument: SynthSettings;
+  color: string;
+  visible: boolean;
+  locked: boolean;
 }
+
+/** Array order = panel display order = z-order; index 0 is topmost. */
+export type LayerStack = Layer[];
+
+/** Cycled by index when a new layer is created (layers.ts's nextLayerColor). */
+export const LAYER_COLORS = [
+  '#6b6bd9',
+  '#38bdf8',
+  '#facc15',
+  '#fb7185',
+  '#34d399',
+  '#f97316',
+  '#a78bfa',
+  '#f472b6',
+] as const;
 
 export interface SelectionContext {
   notes: Note[];
@@ -134,7 +162,7 @@ export interface SelectionContext {
   beatRange: { start: number; end: number } | null;
   isContiguous: boolean;
   activeScales: ActiveScaleSegment[];
-  activeLayers: Layer[]; // [] until Phase 10
+  activeLayers: Layer[]; // distinct layers referenced by `notes`, in panel/z-order
 }
 
 // ── CommandContext (transformations.md) ────────────────────────────────────────
@@ -147,6 +175,8 @@ export interface CommandContext extends SelectionContext {
   allNotes: Note[];
   playhead: number;
   chordTrack: ChordEvent[];
+  /** The layer new, generator-synthesized notes (e.g. generate-chords) should land on. */
+  activeLayerId: string;
 }
 
 // ── Command history ───────────────────────────────────────────────────────────
@@ -158,4 +188,5 @@ export interface DocumentSnapshot {
   chordEvents: ChordEvent[];
   labelEvents: LabelEvent[];
   arrangerSections: ArrangerSection[];
+  layers: LayerStack;
 }

@@ -54,30 +54,37 @@ describe('isContiguous', () => {
   });
 
   it('returns true for a single note', () => {
-    const note = { id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 };
+    const note = {
+      id: '1',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: 'l1',
+    };
     expect(isContiguous([note])).toBe(true);
   });
 
   it('returns true for adjacent notes with no gap', () => {
     const notes = [
-      { id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 },
-      { id: '2', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 },
+      { id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100, layerId: 'l1' },
+      { id: '2', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100, layerId: 'l1' },
     ];
     expect(isContiguous(notes)).toBe(true);
   });
 
   it('returns false when there is a gap between notes', () => {
     const notes = [
-      { id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 },
-      { id: '2', midiNote: 62, startBeat: 2, durationBeats: 1, velocity: 100 }, // gap at beat 1
+      { id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100, layerId: 'l1' },
+      { id: '2', midiNote: 62, startBeat: 2, durationBeats: 1, velocity: 100, layerId: 'l1' }, // gap at beat 1
     ];
     expect(isContiguous(notes)).toBe(false);
   });
 
   it('returns true for overlapping notes', () => {
     const notes = [
-      { id: '1', midiNote: 60, startBeat: 0, durationBeats: 2, velocity: 100 },
-      { id: '2', midiNote: 62, startBeat: 1, durationBeats: 2, velocity: 100 },
+      { id: '1', midiNote: 60, startBeat: 0, durationBeats: 2, velocity: 100, layerId: 'l1' },
+      { id: '2', midiNote: 62, startBeat: 1, durationBeats: 2, velocity: 100, layerId: 'l1' },
     ];
     expect(isContiguous(notes)).toBe(true);
   });
@@ -87,9 +94,9 @@ describe('isContiguous', () => {
     // Naive pairwise: note[0].end=10, note[1].start=2 → gap reported (wrong).
     // Union-coverage: coveredUntil reaches 10, note at 10 is touching → no gap.
     const notes = [
-      { id: '1', midiNote: 60, startBeat: 0, durationBeats: 10, velocity: 100 },
-      { id: '2', midiNote: 62, startBeat: 2, durationBeats: 2, velocity: 100 },
-      { id: '3', midiNote: 64, startBeat: 10, durationBeats: 1, velocity: 100 },
+      { id: '1', midiNote: 60, startBeat: 0, durationBeats: 10, velocity: 100, layerId: 'l1' },
+      { id: '2', midiNote: 62, startBeat: 2, durationBeats: 2, velocity: 100, layerId: 'l1' },
+      { id: '3', midiNote: 64, startBeat: 10, durationBeats: 1, velocity: 100, layerId: 'l1' },
     ];
     expect(isContiguous(notes)).toBe(true);
   });
@@ -116,6 +123,7 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     expect(history.canUndo).toBe(true);
   });
@@ -127,6 +135,7 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     history.undo(() => ({
       notes: [],
@@ -134,6 +143,7 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     expect(history.canRedo).toBe(true);
     history.record('B', () => ({
@@ -142,17 +152,21 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     expect(history.canRedo).toBe(false);
   });
 
   it('undo() returns the recorded snapshot and sets canRedo=true', () => {
     const snap = {
-      notes: [{ id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 }],
+      notes: [
+        { id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100, layerId: 'l1' },
+      ],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     };
     history.record('Transpose', () => snap);
     const entry = history.undo(() => ({
@@ -161,6 +175,7 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     expect(entry?.label).toBe('Transpose');
     expect(entry?.notes).toEqual(snap.notes);
@@ -175,6 +190,7 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     history.undo(() => ({
       notes: [],
@@ -182,6 +198,7 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     const entry = history.redo(() => ({
       notes: [],
@@ -189,6 +206,7 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     expect(entry?.label).toBe('Move');
     expect(history.canRedo).toBe(false);
@@ -203,6 +221,7 @@ describe('CommandHistory', () => {
         chordEvents: [],
         labelEvents: [],
         arrangerSections: [],
+        layers: [],
       })),
     ).toBeUndefined();
   });
@@ -215,6 +234,7 @@ describe('CommandHistory', () => {
         chordEvents: [],
         labelEvents: [],
         arrangerSections: [],
+        layers: [],
       })),
     ).toBeUndefined();
   });
@@ -227,6 +247,7 @@ describe('CommandHistory', () => {
         chordEvents: [],
         labelEvents: [],
         arrangerSections: [],
+        layers: [],
       }));
     }
     // pop 50 times — should all succeed
@@ -237,6 +258,7 @@ describe('CommandHistory', () => {
         chordEvents: [],
         labelEvents: [],
         arrangerSections: [],
+        layers: [],
       }));
       expect(entry).toBeDefined();
     }
@@ -248,6 +270,7 @@ describe('CommandHistory', () => {
         chordEvents: [],
         labelEvents: [],
         arrangerSections: [],
+        layers: [],
       })),
     ).toBeUndefined();
   });
@@ -259,6 +282,7 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     expect(history.undoLabel).toBe('First');
     history.undo(() => ({
@@ -267,6 +291,7 @@ describe('CommandHistory', () => {
       chordEvents: [],
       labelEvents: [],
       arrangerSections: [],
+      layers: [],
     }));
     expect(history.redoLabel).toBe('First');
   });
@@ -277,39 +302,88 @@ describe('CommandHistory', () => {
 describe('createStore — mutation invariants', () => {
   it('clamps midiNote below MIN_MIDI on addNote', () => {
     const store = createStore();
-    store.addNote({ id: '1', midiNote: 0, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: '1',
+      midiNote: 0,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     expect(store.notes[0].midiNote).toBe(MIN_MIDI);
   });
 
   it('clamps midiNote above MAX_MIDI on addNote', () => {
     const store = createStore();
-    store.addNote({ id: '1', midiNote: 999, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: '1',
+      midiNote: 999,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     expect(store.notes[0].midiNote).toBe(MAX_MIDI);
   });
 
   it('clamps startBeat to >= 0 on addNote', () => {
     const store = createStore();
-    store.addNote({ id: '1', midiNote: 60, startBeat: -5, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: '1',
+      midiNote: 60,
+      startBeat: -5,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     expect(store.notes[0].startBeat).toBe(0);
   });
 
   it('clamps durationBeats to >= MIN_DURATION_BEATS on addNote', () => {
     const store = createStore();
-    store.addNote({ id: '1', midiNote: 60, startBeat: 0, durationBeats: 0, velocity: 100 });
+    store.addNote({
+      id: '1',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 0,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     expect(store.notes[0].durationBeats).toBe(MIN_DURATION_BEATS);
   });
 
   it('clamps velocity to [1, 127] on addNote', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 0 });
-    store.addNote({ id: 'b', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 200 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 0,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 200,
+      layerId: store.layers[0].id,
+    });
     expect(store.notes[0].velocity).toBe(1);
     expect(store.notes[1].velocity).toBe(127);
   });
 
   it('clamps midiNote on updateNote', () => {
     const store = createStore();
-    store.addNote({ id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: '1',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.updateNote('1', { midiNote: 200 });
     expect(store.notes[0].midiNote).toBe(MAX_MIDI);
   });
@@ -317,7 +391,14 @@ describe('createStore — mutation invariants', () => {
   it('auto-extends totalBeats when a note exceeds the current length', () => {
     const store = createStore();
     const initialBeats = store.totalBeats; // 64
-    store.addNote({ id: '1', midiNote: 60, startBeat: 60, durationBeats: 8, velocity: 100 });
+    store.addNote({
+      id: '1',
+      midiNote: 60,
+      startBeat: 60,
+      durationBeats: 8,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     expect(store.totalBeats).toBeGreaterThan(initialBeats);
     // Should be rounded up to next 4-beat bar: ceil(68/4)*4 = 68
     expect(store.totalBeats % 4).toBe(0);
@@ -327,14 +408,35 @@ describe('createStore — mutation invariants', () => {
   it('does not extend totalBeats when note fits', () => {
     const store = createStore();
     const initialBeats = store.totalBeats;
-    store.addNote({ id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: '1',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     expect(store.totalBeats).toBe(initialBeats);
   });
 
   it('ignores duplicate note IDs', () => {
     const store = createStore();
-    store.addNote({ id: 'x', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'x', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'x',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'x',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     expect(store.notes.length).toBe(1);
   });
 });
@@ -344,8 +446,22 @@ describe('createStore — mutation invariants', () => {
 describe('createStore — selection', () => {
   it('selectNote exclusive: clears others', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
     store.selectNote('b', false);
     expect(store.selectedNoteIds.has('a')).toBe(false);
@@ -355,14 +471,28 @@ describe('createStore — selection', () => {
 
   it('selectNote toggle: adds when absent', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', true);
     expect(store.selectedNoteIds.has('a')).toBe(true);
   });
 
   it('selectNote toggle: removes when present', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', true);
     store.selectNote('a', true);
     expect(store.selectedNoteIds.has('a')).toBe(false);
@@ -370,15 +500,36 @@ describe('createStore — selection', () => {
 
   it('selectAll selects every note', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectAll();
     expect(store.selectedNoteIds.size).toBe(2);
   });
 
   it('deselectAll clears selection and anchor', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
     store.setAnchor('a');
     store.deselectAll();
@@ -388,8 +539,22 @@ describe('createStore — selection', () => {
 
   it('selectNotes replaces when addToSelection=false', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
     store.selectNotes(['b'], false);
     expect(store.selectedNoteIds.has('a')).toBe(false);
@@ -398,8 +563,22 @@ describe('createStore — selection', () => {
 
   it('selectNotes adds when addToSelection=true', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
     store.selectNotes(['b'], true);
     expect(store.selectedNoteIds.size).toBe(2);
@@ -415,7 +594,14 @@ describe('createStore — selection', () => {
 
   it('selectRange with no anchor falls back to single-select', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectRange('a');
     expect(store.selectedNoteIds.has('a')).toBe(true);
     expect(store.selectedNoteIds.size).toBe(1);
@@ -423,9 +609,30 @@ describe('createStore — selection', () => {
 
   it('selectRange selects inclusive range between anchor and focus', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'c', midiNote: 64, startBeat: 2, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'c',
+      midiNote: 64,
+      startBeat: 2,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.setAnchor('a');
     store.selectRange('c');
     expect(store.selectedNoteIds.size).toBe(3);
@@ -436,7 +643,14 @@ describe('createStore — selection', () => {
 
   it('removeNote removes the note from selection', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
     store.removeNote('a');
     expect(store.selectedNoteIds.has('a')).toBe(false);
@@ -444,8 +658,22 @@ describe('createStore — selection', () => {
 
   it('deleteSelected removes selected notes and records history', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
     store.deleteSelected();
     expect(store.notes.length).toBe(1);
@@ -467,8 +695,22 @@ describe('createStore — selectionContext', () => {
 
   it('derives correct pitchRange and beatRange', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 1, durationBeats: 2, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 72, startBeat: 3, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 1,
+      durationBeats: 2,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 72,
+      startBeat: 3,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectAll();
     const ctx = store.selectionContext;
     expect(ctx.pitchRange).toEqual({ min: 60, max: 72 });
@@ -477,8 +719,22 @@ describe('createStore — selectionContext', () => {
 
   it('isContiguous is false when selected notes have a gap', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 3, durationBeats: 1, velocity: 100 }); // gap
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 3,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    }); // gap
     store.selectAll();
     expect(store.selectionContext.isContiguous).toBe(false);
   });
@@ -489,14 +745,29 @@ describe('createStore — selectionContext', () => {
 describe('createStore — commandContext', () => {
   it('extends selectionContext with allNotes, playhead, and chordTrack (empty until a chord marker is added)', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 64, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 64,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
 
     const ctx = store.commandContext;
     expect(ctx.allNotes).toHaveLength(2);
     expect(ctx.playhead).toBe(store.currentBeat);
     expect(ctx.chordTrack).toEqual([]);
+    expect(ctx.activeLayerId).toBe(store.activeLayerId);
     // still carries the selection-derived fields
     expect(ctx.count).toBe(1);
     expect(ctx.notes[0].id).toBe('a');
@@ -508,7 +779,14 @@ describe('createStore — commandContext', () => {
 describe('createStore — executeCommand', () => {
   it('runs a registry command with params and records history', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
 
     const executed = store.executeCommand('transpose', { semitones: 5 });
@@ -521,7 +799,14 @@ describe('createStore — executeCommand', () => {
 
   it('returns false and leaves notes/history untouched for an unknown command', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
 
     const executed = store.executeCommand('not-a-real-command', { semitones: 5 });
@@ -533,7 +818,14 @@ describe('createStore — executeCommand', () => {
 
   it('returns false and leaves notes/history untouched for an inapplicable command', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     // No selection, so transpose (requires selectAtLeastOne) is inapplicable.
 
     const executed = store.executeCommand('transpose', { semitones: 5 });
@@ -549,10 +841,26 @@ describe('createStore — executeCommand', () => {
 describe('createStore — applyCommandResult', () => {
   it('replaces the notes array with the (clamped) command result', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
 
     store.applyCommandResult({
-      notes: [{ id: 'a', midiNote: 999, startBeat: -5, durationBeats: 0, velocity: 200 }],
+      notes: [
+        {
+          id: 'a',
+          midiNote: 999,
+          startBeat: -5,
+          durationBeats: 0,
+          velocity: 200,
+          layerId: store.layers[0].id,
+        },
+      ],
       label: 'Test command',
     });
 
@@ -565,10 +873,26 @@ describe('createStore — applyCommandResult', () => {
 
   it('records history so undo() restores the pre-command notes', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
 
     store.applyCommandResult({
-      notes: [{ id: 'a', midiNote: 65, startBeat: 0, durationBeats: 1, velocity: 100 }],
+      notes: [
+        {
+          id: 'a',
+          midiNote: 65,
+          startBeat: 0,
+          durationBeats: 1,
+          velocity: 100,
+          layerId: store.layers[0].id,
+        },
+      ],
       label: 'Transpose',
     });
     expect(store.notes[0].midiNote).toBe(65);
@@ -583,7 +907,16 @@ describe('createStore — applyCommandResult', () => {
     const store = createStore();
     const initialBeats = store.totalBeats;
     store.applyCommandResult({
-      notes: [{ id: 'a', midiNote: 60, startBeat: 60, durationBeats: 8, velocity: 100 }],
+      notes: [
+        {
+          id: 'a',
+          midiNote: 60,
+          startBeat: 60,
+          durationBeats: 8,
+          velocity: 100,
+          layerId: store.layers[0].id,
+        },
+      ],
       label: 'Grow',
     });
     expect(store.totalBeats).toBeGreaterThan(initialBeats);
@@ -591,13 +924,36 @@ describe('createStore — applyCommandResult', () => {
 
   it('prunes selection to only notes that still exist after the command result', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectAll();
     expect(store.selectionContext.count).toBe(2);
 
     store.applyCommandResult({
-      notes: [{ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 }],
+      notes: [
+        {
+          id: 'a',
+          midiNote: 60,
+          startBeat: 0,
+          durationBeats: 1,
+          velocity: 100,
+          layerId: store.layers[0].id,
+        },
+      ],
       label: 'Remove one',
     });
 
@@ -611,8 +967,22 @@ describe('createStore — applyCommandResult', () => {
 describe('createStore — clipboard', () => {
   it('copy normalizes startBeats to 0-relative', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 4, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 5, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 4,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 5,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectAll();
     store.copy();
     expect(store.clipboard?.notes[0].startBeat).toBe(0);
@@ -627,7 +997,14 @@ describe('createStore — clipboard', () => {
 
   it('paste inserts notes at atBeat, selects them, records history', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectAll();
     store.copy();
     store.deselectAll();
@@ -648,8 +1025,22 @@ describe('createStore — clipboard', () => {
 
   it('duplicateSelection offsets by selection span and selects duplicates', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 2, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 2, durationBeats: 2, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 2,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 2,
+      durationBeats: 2,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectAll();
     store.duplicateSelection();
     expect(store.notes.length).toBe(4);
@@ -821,7 +1212,14 @@ describe('createStore — scale track', () => {
 
   it('selectionContext.activeScales reflects the scale(s) under the current selection', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 2, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 2,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
     const ctx = store.selectionContext;
     expect(ctx.activeScales).toHaveLength(1);
@@ -833,7 +1231,14 @@ describe('createStore — scale track', () => {
   it('selectionContext.activeScales splits a selection spanning a scale change into multiple segments', () => {
     const store = createStore();
     store.upsertScaleEvent({ id: 'm1', beat: 4, root: 9, mode: 'aeolian' });
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 8, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 8,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
     const ctx = store.selectionContext;
     expect(ctx.activeScales).toHaveLength(2);
@@ -1066,13 +1471,327 @@ describe('createStore — arranger track', () => {
   });
 });
 
+// ── createStore — layers (layers.md) ──────────────────────────────────────────
+
+describe('createStore — layers', () => {
+  it('starts with exactly one default "Piano" layer, active', () => {
+    const store = createStore();
+    expect(store.layers).toHaveLength(1);
+    expect(store.layers[0].name).toBe('Piano');
+    expect(store.activeLayerId).toBe(store.layers[0].id);
+  });
+
+  it('addLayer prepends a new layer and makes it active', () => {
+    const store = createStore();
+    const originalId = store.layers[0].id;
+    store.addLayer();
+    expect(store.layers).toHaveLength(2);
+    expect(store.layers[0].id).not.toBe(originalId);
+    expect(store.activeLayerId).toBe(store.layers[0].id);
+    expect(store.layers[1].id).toBe(originalId);
+  });
+
+  it('addLayer is undoable', () => {
+    const store = createStore();
+    store.addLayer();
+    store.undo();
+    expect(store.layers).toHaveLength(1);
+  });
+
+  it('renameLayer updates the name and is undoable', () => {
+    const store = createStore();
+    const id = store.layers[0].id;
+    store.renameLayer(id, 'Strings');
+    expect(store.layerFor(id)?.name).toBe('Strings');
+    store.undo();
+    expect(store.layerFor(id)?.name).toBe('Piano');
+  });
+
+  it('renameLayer no-ops (no history entry) when the name is unchanged', () => {
+    const store = createStore();
+    const id = store.layers[0].id;
+    store.renameLayer(id, 'Piano');
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('setLayerVisible toggles visibility and is undoable', () => {
+    const store = createStore();
+    const id = store.layers[0].id;
+    store.setLayerVisible(id, false);
+    expect(store.layerFor(id)?.visible).toBe(false);
+    store.undo();
+    expect(store.layerFor(id)?.visible).toBe(true);
+  });
+
+  it('setLayerLocked toggles lock and is undoable', () => {
+    const store = createStore();
+    const id = store.layers[0].id;
+    store.setLayerLocked(id, true);
+    expect(store.layerFor(id)?.locked).toBe(true);
+    store.undo();
+    expect(store.layerFor(id)?.locked).toBe(false);
+  });
+
+  it('moveLayer reorders the stack and is undoable', () => {
+    const store = createStore();
+    const firstId = store.layers[0].id;
+    store.addLayer();
+    const secondId = store.layers[0].id; // addLayer prepends, so this is the new one
+    store.moveLayer(secondId, 1);
+    expect(store.layers.map((l) => l.id)).toEqual([firstId, secondId]);
+    store.undo();
+    expect(store.layers.map((l) => l.id)).toEqual([secondId, firstId]);
+  });
+
+  it('removeLayer refuses to remove the only remaining layer', () => {
+    const store = createStore();
+    const id = store.layers[0].id;
+    store.removeLayer(id);
+    expect(store.layers).toHaveLength(1);
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('removeLayer deletes the layer and every note on it, in one undo step', () => {
+    const store = createStore();
+    const firstId = store.layers[0].id;
+    store.addLayer();
+    const secondId = store.layers[0].id;
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: secondId,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: firstId,
+    });
+
+    store.removeLayer(secondId);
+    expect(store.layers).toHaveLength(1);
+    expect(store.notes.map((n) => n.id)).toEqual(['b']);
+
+    store.undo();
+    expect(store.layers).toHaveLength(2);
+    expect(store.notes.map((n) => n.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('removeLayer reassigns activeLayerId when the active layer is removed', () => {
+    const store = createStore();
+    const firstId = store.layers[0].id;
+    store.addLayer();
+    const secondId = store.layers[0].id;
+    expect(store.activeLayerId).toBe(secondId);
+    store.removeLayer(secondId);
+    expect(store.activeLayerId).toBe(firstId);
+  });
+
+  it('removeLayer prunes selection to notes that still exist', () => {
+    const store = createStore();
+    store.addLayer();
+    const secondId = store.layers[0].id;
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: secondId,
+    });
+    store.selectNote('a', false);
+    store.removeLayer(secondId);
+    expect(store.selectedNoteIds.has('a')).toBe(false);
+  });
+
+  it('new notes drawn via addNote land on whatever layer is passed (activeLayerId at the UI call site)', () => {
+    const store = createStore();
+    store.addLayer();
+    const activeId = store.activeLayerId;
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.activeLayerId,
+    });
+    expect(store.notes[0].layerId).toBe(activeId);
+  });
+
+  it('selectionContext drops a note reactively when its layer is hidden, without touching selectedNoteIds', () => {
+    const store = createStore();
+    const layerId = store.layers[0].id;
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId,
+    });
+    store.selectNote('a', false);
+    expect(store.selectionContext.count).toBe(1);
+
+    store.setLayerVisible(layerId, false);
+    expect(store.selectionContext.count).toBe(0);
+    expect(store.selectionContext.activeLayers).toEqual([]);
+    expect(store.selectedNoteIds.has('a')).toBe(true); // untouched — just ineligible
+
+    store.setLayerVisible(layerId, true);
+    expect(store.selectionContext.count).toBe(1);
+  });
+
+  it('selectionContext drops a note reactively when its layer is locked', () => {
+    const store = createStore();
+    const layerId = store.layers[0].id;
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId,
+    });
+    store.selectNote('a', false);
+    store.setLayerLocked(layerId, true);
+    expect(store.selectionContext.count).toBe(0);
+    store.setLayerLocked(layerId, false);
+    expect(store.selectionContext.count).toBe(1);
+  });
+
+  it('selectionContext.activeLayers is the deduplicated set of layers referenced by the selection, in stack order', () => {
+    const store = createStore();
+    const firstId = store.layers[0].id;
+    store.addLayer();
+    const secondId = store.layers[0].id;
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: firstId,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: secondId,
+    });
+    store.addNote({
+      id: 'c',
+      midiNote: 64,
+      startBeat: 2,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: firstId,
+    });
+    store.selectAll();
+    expect(store.selectionContext.activeLayers.map((l) => l.id)).toEqual([secondId, firstId]);
+  });
+
+  it('selectAll only selects notes on visible, unlocked layers', () => {
+    const store = createStore();
+    const firstId = store.layers[0].id;
+    store.addLayer();
+    const secondId = store.layers[0].id;
+    store.setLayerLocked(secondId, true);
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: firstId,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: secondId,
+    });
+
+    store.selectAll();
+    expect([...store.selectedNoteIds]).toEqual(['a']);
+  });
+
+  it("paste falls back to the active layer when the copied note's original layer was deleted", () => {
+    const store = createStore();
+    const firstId = store.layers[0].id;
+    store.addLayer();
+    const secondId = store.layers[0].id;
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: secondId,
+    });
+    store.selectNote('a', false);
+    store.copy();
+
+    store.removeLayer(secondId); // deletes 'a' along with its layer
+    expect(store.activeLayerId).toBe(firstId);
+
+    store.paste(4);
+    expect(store.notes).toHaveLength(1);
+    expect(store.notes[0].layerId).toBe(firstId);
+  });
+
+  it('paste keeps a note on its original layer when that layer still exists', () => {
+    const store = createStore();
+    const firstId = store.layers[0].id;
+    store.addLayer();
+    const secondId = store.layers[0].id;
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: secondId,
+    });
+    store.selectNote('a', false);
+    store.copy();
+    store.activeLayerId = firstId;
+    store.paste(4);
+    const pasted = store.notes.find((n) => n.id !== 'a');
+    expect(pasted?.layerId).toBe(secondId);
+  });
+});
+
 // ── createStore — undo/redo integration ──────────────────────────────────────
 
 describe('createStore — undo/redo', () => {
   it('undo restores previous notes state', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
-    store.addNote({ id: 'b', midiNote: 62, startBeat: 1, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
+    store.addNote({
+      id: 'b',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     // selectNote 'b' then deleteSelected records history and removes it
     store.selectNote('b', false);
     store.deleteSelected();
@@ -1085,7 +1804,14 @@ describe('createStore — undo/redo', () => {
 
   it('redo re-applies after undo', () => {
     const store = createStore();
-    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.addNote({
+      id: 'a',
+      midiNote: 60,
+      startBeat: 0,
+      durationBeats: 1,
+      velocity: 100,
+      layerId: store.layers[0].id,
+    });
     store.selectNote('a', false);
     store.deleteSelected(); // records and removes 'a'
     expect(store.notes.length).toBe(0);
