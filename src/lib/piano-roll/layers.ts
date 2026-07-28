@@ -38,6 +38,17 @@ export function isLayerSelectable(layer: Layer | undefined): boolean {
   return layer !== undefined && layer.visible && !layer.locked;
 }
 
+/**
+ * The topmost selectable (visible, unlocked) layer in the stack, or
+ * `undefined` if every layer is hidden/locked. Used to redirect new-note
+ * creation off the active layer when it isn't currently selectable, so a
+ * draw-mode click never lands a note somewhere it would be invisible or
+ * immediately un-selectable.
+ */
+export function firstSelectableLayer(stack: LayerStack): Layer | undefined {
+  return stack.find((layer) => isLayerSelectable(layer));
+}
+
 /** Cycles LAYER_COLORS by current layer count, so consecutive new layers default to visibly distinct colors. */
 export function nextLayerColor(existing: LayerStack): string {
   return LAYER_COLORS[existing.length % LAYER_COLORS.length];

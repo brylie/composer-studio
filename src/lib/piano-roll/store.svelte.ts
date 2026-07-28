@@ -8,6 +8,7 @@ import {
   resizeSectionStart,
   updateSection,
 } from './arranger.js';
+import { disposeLayer } from './audio.js';
 import { commandRegistry } from './commands/index.js';
 import { CommandHistory, isContiguous } from './history.js';
 import {
@@ -568,10 +569,9 @@ export function createStore() {
     recordHistory('Remove layer');
     layers = layers.filter((l) => l.id !== id);
     notes = notes.filter((n) => n.layerId !== id);
-    for (const noteId of [...selectedNoteIds]) {
-      if (!notes.some((n) => n.id === noteId)) selectedNoteIds.delete(noteId);
-    }
+    pruneSelectionToExistingNotes();
     revalidateActiveLayer();
+    disposeLayer(id);
   }
 
   function renameLayer(id: string, name: string) {

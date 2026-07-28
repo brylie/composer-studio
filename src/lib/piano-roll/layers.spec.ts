@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultLayer, isLayerSelectable, moveLayer, nextLayerColor } from './layers.js';
+import {
+  createDefaultLayer,
+  firstSelectableLayer,
+  isLayerSelectable,
+  moveLayer,
+  nextLayerColor,
+} from './layers.js';
 import type { Layer, LayerStack } from './types.js';
 import { DEFAULT_SYNTH, LAYER_COLORS } from './types.js';
 
@@ -51,6 +57,30 @@ describe('isLayerSelectable', () => {
 
   it('is false for a missing (undefined) layer', () => {
     expect(isLayerSelectable(undefined)).toBe(false);
+  });
+});
+
+describe('firstSelectableLayer', () => {
+  it('returns undefined for an empty stack', () => {
+    expect(firstSelectableLayer([])).toBeUndefined();
+  });
+
+  it('returns the first visible, unlocked layer in stack order', () => {
+    const stack: LayerStack = [
+      makeLayer({ id: 'hidden', visible: false }),
+      makeLayer({ id: 'locked', locked: true }),
+      makeLayer({ id: 'ok' }),
+      makeLayer({ id: 'ok2' }),
+    ];
+    expect(firstSelectableLayer(stack)?.id).toBe('ok');
+  });
+
+  it('returns undefined when every layer is hidden or locked', () => {
+    const stack: LayerStack = [
+      makeLayer({ id: 'hidden', visible: false }),
+      makeLayer({ id: 'locked', locked: true }),
+    ];
+    expect(firstSelectableLayer(stack)).toBeUndefined();
   });
 });
 

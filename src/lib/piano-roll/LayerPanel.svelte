@@ -50,6 +50,17 @@
     const target = e.currentTarget as HTMLElement;
     if (target.hasPointerCapture(e.pointerId)) target.releasePointerCapture(e.pointerId);
   }
+
+  /** Keyboard equivalent of the pointer drag above — Arrow Up/Down moves the row one step, matching the same `store.moveLayer` call the drag commits on pointer-up. */
+  function handleDragKeydown(e: KeyboardEvent, id: string, index: number) {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      store.moveLayer(id, index - 1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      store.moveLayer(id, index + 1);
+    }
+  }
 </script>
 
 <div class="layer-panel">
@@ -69,6 +80,9 @@
           }}
           onpointermove={handleDragPointerMove}
           onpointerup={handleDragPointerUp}
+          onkeydown={(e) => {
+            handleDragKeydown(e, layer.id, index);
+          }}
         >
           <Icon name="grip" />
         </button>

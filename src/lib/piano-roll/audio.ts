@@ -104,6 +104,28 @@ export function auditionNote(layerId: string, midiNote: number, settings: SynthS
   synth.triggerAttackRelease(midiToFreq(midiNote), 0.5);
 }
 
+/**
+ * Disposes a single layer's synth/filter and drops its map entry — called
+ * when a layer is deleted (store.svelte.ts's removeLayer) so an audition-only
+ * or playback instrument for a since-deleted layer doesn't linger forever.
+ */
+export function disposeLayer(layerId: string): void {
+  const instrument = _instruments.get(layerId);
+  if (!instrument) return;
+  instrument.synth.dispose();
+  instrument.filter.dispose();
+  _instruments.delete(layerId);
+}
+
+/** Disposes every layer's instrument, regardless of playback state. */
+function disposeAllInstruments(): void {
+  for (const instrument of _instruments.values()) {
+    instrument.synth.dispose();
+    instrument.filter.dispose();
+  }
+  _instruments.clear();
+}
+
 // ── Playback scheduler ───────────────────────────────────────────────────────
 //
 // Tone.Transport replaces the old setInterval/lookahead scheduler: it's a
@@ -225,18 +247,20 @@ export function startPlayback(options: PlaybackOptions): void {
 }
 
 export function stopPlayback(): void {
-  // Guard against touching Tone's global transport when nothing is playing —
-  // e.g. Toolbar's onDestroy calls this unconditionally, and onDestroy also
-  // runs during SSR (unlike onMount), where there's no AudioContext at all.
-  if (_options === null && _scheduleEventId === null && _rafId === null) return;
-
-  const transport = Tone.getTransport();
-  if (_scheduleEventId !== null) {
-    transport.clear(_scheduleEventId);
-    _scheduleEventId = null;
+  // Guard the transport-touching calls (not instrument disposal below) when
+  // nothing is playing — e.g. Toolbar's onDestroy calls this unconditionally,
+  // and onDestroy also runs during SSR (unlike onMount), where there's no
+  // AudioContext at all.
+  const transportActive = _options !== null || _scheduleEventId !== null || _rafId !== null;
+  if (transportActive) {
+    const transport = Tone.getTransport();
+    if (_scheduleEventId !== null) {
+      transport.clear(_scheduleEventId);
+      _scheduleEventId = null;
+    }
+    transport.off('loop', handleTransportLoop);
+    transport.stop();
   }
-  transport.off('loop', handleTransportLoop);
-  transport.stop();
 
   // releaseAll() follows the configured release envelope (up to 4s, per the
   // Sound drawer), so it can't guarantee immediate silence — including for
@@ -244,11 +268,10 @@ export function stopPlayback(): void {
   // layer's instrument forces a hard cutoff regardless of envelope/schedule;
   // getInstrument()/applySettings() lazily recreate and fully reconfigure
   // each one (oscillator, envelope, volume, filter routing) on next trigger.
-  for (const instrument of _instruments.values()) {
-    instrument.synth.dispose();
-    instrument.filter.dispose();
-  }
-  _instruments.clear();
+  // Unconditional (not gated on transportActive) so audition-only instruments
+  // — created without ever starting playback — are cleared too, e.g. on
+  // editor teardown.
+  disposeAllInstruments();
 
   if (_rafId !== null) {
     cancelAnimationFrame(_rafId);

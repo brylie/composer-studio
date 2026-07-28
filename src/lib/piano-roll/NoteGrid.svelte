@@ -4,7 +4,7 @@
   import { isBlackKey, MIN_MIDI, MAX_MIDI, NOTE_COUNT } from './types.js';
   import type { Note } from './types.js';
   import { auditionNote } from './audio.js';
-  import { isLayerSelectable } from './layers.js';
+  import { firstSelectableLayer, isLayerSelectable } from './layers.js';
   import { harmonySegments, scaleSegments } from './tracks.js';
 
   // layers.md#rendering-and-interaction-rules: hidden-layer notes never
@@ -300,23 +300,32 @@
   function handlePointerUp(e: PointerEvent) {
     if (dragMode === 'select') {
       if (pendingNoteCreate) {
-        // Click with no significant drag in draw mode → create a note
-        const { beat, row } = pendingNoteCreate;
-        const snappedBeat = snapFloor(beat);
-        const midi = midiForRow(Math.max(0, Math.min(NOTE_COUNT - 1, row)));
-        const id = generateId();
-        store.history.record('Add note');
-        store.addNote({
-          id,
-          midiNote: midi,
-          startBeat: snappedBeat,
-          durationBeats: store.snapBeats,
-          velocity: 100,
-          layerId: store.activeLayerId,
-        });
-        store.selectNote(id, isAdditive(e));
-        store.setAnchor(id);
-        auditionNote(store.activeLayerId, midi, store.synthSettings);
+        // Click with no significant drag in draw mode → create a note. The
+        // active layer can itself be hidden/locked (layers.md's active-layer
+        // concept is independent of visibility/lock), which would otherwise
+        // land a new note somewhere invisible or immediately un-selectable —
+        // redirect to the topmost selectable layer instead, if one exists.
+        const targetLayer = isLayerSelectable(store.layerFor(store.activeLayerId))
+          ? store.layerFor(store.activeLayerId)
+          : firstSelectableLayer(store.layers);
+        if (targetLayer) {
+          const { beat, row } = pendingNoteCreate;
+          const snappedBeat = snapFloor(beat);
+          const midi = midiForRow(Math.max(0, Math.min(NOTE_COUNT - 1, row)));
+          const id = generateId();
+          store.history.record('Add note');
+          store.addNote({
+            id,
+            midiNote: midi,
+            startBeat: snappedBeat,
+            durationBeats: store.snapBeats,
+            velocity: 100,
+            layerId: targetLayer.id,
+          });
+          store.selectNote(id, isAdditive(e));
+          store.setAnchor(id);
+          auditionNote(targetLayer.id, midi, store.synthSettings);
+        }
       } else if (selRect) {
         // Rect drag → select all overlapping notes
         const rect = selRect;

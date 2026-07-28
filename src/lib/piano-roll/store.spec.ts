@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CommandHistory, isContiguous } from './history.js';
 import { createStore } from './store.svelte.js';
+import type { Note } from './types.js';
 import {
   MAX_MIDI,
   MIN_DURATION_BEATS,
@@ -9,6 +10,21 @@ import {
   midiToFreq,
   noteName,
 } from './types.js';
+
+/** Default-filled Note for tests that don't care about most fields — lands on `store`'s first layer unless overridden. */
+function makeNote(
+  store: ReturnType<typeof createStore>,
+  overrides: Partial<Note> & { id: string },
+): Note {
+  return {
+    midiNote: 60,
+    startBeat: 0,
+    durationBeats: 1,
+    velocity: 100,
+    layerId: store.layers[0].id,
+    ...overrides,
+  };
+}
 
 // ── types.ts utilities ────────────────────────────────────────────────────────
 
@@ -302,88 +318,39 @@ describe('CommandHistory', () => {
 describe('createStore — mutation invariants', () => {
   it('clamps midiNote below MIN_MIDI on addNote', () => {
     const store = createStore();
-    store.addNote({
-      id: '1',
-      midiNote: 0,
-      startBeat: 0,
-      durationBeats: 1,
-      velocity: 100,
-      layerId: store.layers[0].id,
-    });
+    store.addNote(makeNote(store, { id: '1', midiNote: 0 }));
     expect(store.notes[0].midiNote).toBe(MIN_MIDI);
   });
 
   it('clamps midiNote above MAX_MIDI on addNote', () => {
     const store = createStore();
-    store.addNote({
-      id: '1',
-      midiNote: 999,
-      startBeat: 0,
-      durationBeats: 1,
-      velocity: 100,
-      layerId: store.layers[0].id,
-    });
+    store.addNote(makeNote(store, { id: '1', midiNote: 999 }));
     expect(store.notes[0].midiNote).toBe(MAX_MIDI);
   });
 
   it('clamps startBeat to >= 0 on addNote', () => {
     const store = createStore();
-    store.addNote({
-      id: '1',
-      midiNote: 60,
-      startBeat: -5,
-      durationBeats: 1,
-      velocity: 100,
-      layerId: store.layers[0].id,
-    });
+    store.addNote(makeNote(store, { id: '1', startBeat: -5 }));
     expect(store.notes[0].startBeat).toBe(0);
   });
 
   it('clamps durationBeats to >= MIN_DURATION_BEATS on addNote', () => {
     const store = createStore();
-    store.addNote({
-      id: '1',
-      midiNote: 60,
-      startBeat: 0,
-      durationBeats: 0,
-      velocity: 100,
-      layerId: store.layers[0].id,
-    });
+    store.addNote(makeNote(store, { id: '1', durationBeats: 0 }));
     expect(store.notes[0].durationBeats).toBe(MIN_DURATION_BEATS);
   });
 
   it('clamps velocity to [1, 127] on addNote', () => {
     const store = createStore();
-    store.addNote({
-      id: 'a',
-      midiNote: 60,
-      startBeat: 0,
-      durationBeats: 1,
-      velocity: 0,
-      layerId: store.layers[0].id,
-    });
-    store.addNote({
-      id: 'b',
-      midiNote: 60,
-      startBeat: 0,
-      durationBeats: 1,
-      velocity: 200,
-      layerId: store.layers[0].id,
-    });
+    store.addNote(makeNote(store, { id: 'a', velocity: 0 }));
+    store.addNote(makeNote(store, { id: 'b', velocity: 200 }));
     expect(store.notes[0].velocity).toBe(1);
     expect(store.notes[1].velocity).toBe(127);
   });
 
   it('clamps midiNote on updateNote', () => {
     const store = createStore();
-    store.addNote({
-      id: '1',
-      midiNote: 60,
-      startBeat: 0,
-      durationBeats: 1,
-      velocity: 100,
-      layerId: store.layers[0].id,
-    });
+    store.addNote(makeNote(store, { id: '1' }));
     store.updateNote('1', { midiNote: 200 });
     expect(store.notes[0].midiNote).toBe(MAX_MIDI);
   });
@@ -391,14 +358,7 @@ describe('createStore — mutation invariants', () => {
   it('auto-extends totalBeats when a note exceeds the current length', () => {
     const store = createStore();
     const initialBeats = store.totalBeats; // 64
-    store.addNote({
-      id: '1',
-      midiNote: 60,
-      startBeat: 60,
-      durationBeats: 8,
-      velocity: 100,
-      layerId: store.layers[0].id,
-    });
+    store.addNote(makeNote(store, { id: '1', startBeat: 60, durationBeats: 8 }));
     expect(store.totalBeats).toBeGreaterThan(initialBeats);
     // Should be rounded up to next 4-beat bar: ceil(68/4)*4 = 68
     expect(store.totalBeats % 4).toBe(0);
@@ -408,35 +368,14 @@ describe('createStore — mutation invariants', () => {
   it('does not extend totalBeats when note fits', () => {
     const store = createStore();
     const initialBeats = store.totalBeats;
-    store.addNote({
-      id: '1',
-      midiNote: 60,
-      startBeat: 0,
-      durationBeats: 1,
-      velocity: 100,
-      layerId: store.layers[0].id,
-    });
+    store.addNote(makeNote(store, { id: '1' }));
     expect(store.totalBeats).toBe(initialBeats);
   });
 
   it('ignores duplicate note IDs', () => {
     const store = createStore();
-    store.addNote({
-      id: 'x',
-      midiNote: 60,
-      startBeat: 0,
-      durationBeats: 1,
-      velocity: 100,
-      layerId: store.layers[0].id,
-    });
-    store.addNote({
-      id: 'x',
-      midiNote: 62,
-      startBeat: 1,
-      durationBeats: 1,
-      velocity: 100,
-      layerId: store.layers[0].id,
-    });
+    store.addNote(makeNote(store, { id: 'x' }));
+    store.addNote(makeNote(store, { id: 'x', midiNote: 62, startBeat: 1 }));
     expect(store.notes.length).toBe(1);
   });
 });
