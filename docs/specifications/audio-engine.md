@@ -11,55 +11,87 @@ is a separate concern, specified in [persistence.md](./persistence.md) —
 this document is about rendering to _audio_ or to the _MIDI standard_, not
 about saving/loading this app's own document.
 
-> This documents the current hand-rolled implementation. See
-> [libraries.md](./libraries.md#tonejs--adopt-but-its-a-rewrite-not-just-an-addition)
-> for the planned Tone.js migration — a rewrite of everything below, not an
-> addition to it — and the open sequencing question of when to do it.
+> This documents the Tone.js-based implementation adopted in Phase 5, per
+> [libraries.md](./libraries.md#tonejs--adopt-but-its-a-rewrite-not-just-an-addition).
+> It replaced the original hand-rolled `AudioContext`/`OscillatorNode`
+> scheduler wholesale, not additively.
 
 ---
 
 ## Audio engine (`audio.ts`)
 
-### AudioContext
+### Instrument
 
-One shared `AudioContext`, created lazily on first interaction (autoplay
-policies require a user gesture before audio can start).
+One document-wide `Tone.PolySynth(Tone.Synth)` ("piano"), routed through a
+single shared post-synth `Tone.Filter` — not a per-voice filter, matching the
+Sound drawer's one Cutoff/Resonance pair — per
+[libraries.md](./libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth).
+Both are created lazily on first use, since Tone can't touch the audio
+context before a user gesture. `SynthSettings` (waveform, envelope, volume,
+filter) are re-applied to the shared instrument on every note trigger and
+scheduler tick — oscillator `type` and `envelope` via `PolySynth.set()`,
+`volume` converted from the store's 0–100 linear scale to decibels via
+`Tone.gainToDb`, and the filter's `enabled` flag toggled by reconnecting the
+synth directly to the destination versus through the filter (only on actual
+state change, to avoid needless graph churn every tick).
 
 ### Playback scheduler
 
-- `setInterval` at **25 ms** intervals.
-- On each tick, schedules all notes within the next **100 ms** lookahead
-  window.
-- Each note: `OscillatorNode → (optional BiquadFilterNode) → GainNode → destination`.
-- Applies **ADSR envelope** via `GainNode.gain` `AudioParam` automation.
-- Tracks scheduled notes by `noteId:loopIteration` key to prevent
-  double-scheduling.
-- A `requestAnimationFrame` loop updates `currentBeat` for smooth playhead
-  animation.
+`Tone.Transport` is the master clock — a drift-corrected, audio-context-clock
+driven scheduler, replacing the old main-thread `setInterval`. A repeating
+event (`Transport.scheduleRepeat`, still a 25 ms interval and 100 ms lookahead
+window, matching the original scan cadence) scans `getNotes()` fresh on every
+tick — so notes added while the transport is running are picked up without
+needing to stop/restart playback — and calls `PolySynth.triggerAttackRelease`
+for anything entering the lookahead window, keyed by `noteId:loopPass` to
+prevent double-scheduling. `Tone.Transport.bpm` is kept in sync with
+`getTempo()` every tick, so tempo changes during playback don't cause a
+position discontinuity the way recomputing beats-from-elapsed-wall-time by
+hand would.
+
+A `requestAnimationFrame` loop reads `Transport.ticks` (converted to beats
+via `Transport.PPQ`) to drive `onTick`/the playhead, same cadence as before.
 
 ### Loop handling
 
-When `loopEnabled` is `true`, the scheduler calculates the loop iteration for
-each note and schedules it accordingly; the playhead wraps at `totalBeats`
-today, with no adjustable in/out points. `loopStart`/`loopEnd` are a planned
-Ruler feature ([piano-roll.md](./piano-roll.md#ruler)) — they don't exist on
-`EditorState`/`store.svelte.ts` yet, so there's nothing for the scheduler to
-read even once it's updated. Two more pieces land alongside the store
-fields, all as one change: `audio.ts`'s `PlaybackOptions` interface — which
-today only exposes `getTotalBeats`/`getLoopEnabled` — needs
-`getLoopStart`/`getLoopEnd` getters added, and the scheduler's own loop
-math (`minLoop`/`maxLoop`, `noteBeat = note.startBeat + loop * totalBeats`)
-needs to wrap within `[loopStart, loopEnd)` instead of `[0, totalBeats)`.
-Three sub-pieces, not one — store fields, options contract, scheduler math
-— none of which is meaningful without the other two.
+`Transport.loop`/`loopStart`/`loopEnd` replace the old manual
+`minLoop`/`maxLoop` iteration math — the transport wraps its own tick
+position at `loopEnd` and emits a `"loop"` event, which `audio.ts` uses only
+to bump a `_loopPass` counter for the dedup key above. `loopStart` is always
+`0` and `loopEnd` tracks `totalBeats` today, recomputed every tick since
+`totalBeats` can grow while playing (a note dragged past the current end).
+Adjustable in/out points are still the planned Ruler feature
+([piano-roll.md](./piano-roll.md#ruler)) — `loopStart`/`loopEnd` don't exist
+on `EditorState`/`store.svelte.ts` yet, so there's nothing for the scheduler
+to read even once Transport-based looping already supports it structurally.
 
 ### Frequency mapping
 
 $$f = 440 \times 2^{(\text{midiNote} - 69) \,/\, 12}$$
 
+Still done by hand (`midiToFreq`) rather than via Tone's note-name parsing,
+since `Note.midiNote` is the app's native representation and
+`PolySynth.triggerAttackRelease` accepts a raw frequency number directly —
+no need to round-trip through Tone's `'C4'`-style note names.
+
 ### Audition (key click)
 
-Triggers a 500 ms note at the clicked pitch, using current synth settings.
+Triggers a 500 ms note at the clicked pitch, using current synth settings,
+via the same shared `PolySynth`.
+
+### Stopping playback
+
+`Transport.stop()` halts the scheduler and playhead. `PolySynth.releaseAll()`
+alone isn't enough for immediate silence — it still runs the configured
+release envelope (up to 4s, per the Sound drawer's Release slider), and it
+can't un-sound attacks already scheduled inside the 100ms lookahead window.
+Instead, `stopPlayback()` disposes the shared `PolySynth` outright for a hard
+cutoff, and clears the cached "last applied settings"/filter-routing state so
+`getPiano()`/`applySettings()` lazily recreate and fully reconfigure a fresh
+instrument (oscillator, envelope, volume, filter routing) the next time a
+note is triggered or auditioned — the original hand-rolled scheduler had no
+equivalent, since once `osc.start(t)`/`osc.stop(t)` were scheduled on the raw
+`AudioContext` they couldn't be un-scheduled.
 
 ---
 
