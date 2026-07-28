@@ -643,6 +643,58 @@ describe('createStore — scale track', () => {
     expect(store.scaleTrack.some((e) => e.id === 'm1')).toBe(true);
   });
 
+  it('moveScaleEvent relocates a marker to a new beat, keeping its id/root/mode', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.moveScaleEvent('m1', 12);
+    expect(store.scaleTrack.find((e) => e.id === 'm1')).toEqual({
+      id: 'm1',
+      beat: 12,
+      root: 9,
+      mode: 'aeolian',
+    });
+    expect(store.scaleTrack).toHaveLength(2);
+  });
+
+  it('moveScaleEvent replaces whatever marker already occupies the target beat', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.upsertScaleEvent({ id: 'm2', beat: 16, root: 2, mode: 'dorian' });
+    store.moveScaleEvent('m1', 16);
+    expect(store.scaleTrack).toHaveLength(2); // default C-major event + the moved m1
+    expect(store.scaleTrack.some((e) => e.id === 'm2')).toBe(false);
+    expect(store.scaleTrack.find((e) => e.beat === 16)).toEqual({
+      id: 'm1',
+      beat: 16,
+      root: 9,
+      mode: 'aeolian',
+    });
+  });
+
+  it('moveScaleEvent records history so undo restores the original beat', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.moveScaleEvent('m1', 12);
+    expect(store.history.undoLabel).toBe('Move scale marker');
+    store.undo();
+    expect(store.scaleTrack.find((e) => e.id === 'm1')?.beat).toBe(8);
+  });
+
+  it('moveScaleEvent is a no-op (no history entry) when the beat is unchanged', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    const undoLabelBefore = store.history.undoLabel;
+    store.moveScaleEvent('m1', 8);
+    expect(store.history.undoLabel).toBe(undoLabelBefore);
+  });
+
+  it('moveScaleEvent is a no-op for an unknown id', () => {
+    const store = createStore();
+    store.moveScaleEvent('does-not-exist', 8);
+    expect(store.scaleTrack).toHaveLength(1);
+    expect(store.history.canUndo).toBe(false);
+  });
+
   it('activeScaleAt resolves the scale in effect at a given beat', () => {
     const store = createStore();
     store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });

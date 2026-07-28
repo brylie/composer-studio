@@ -337,6 +337,22 @@ export function createStore() {
     scaleTrack = removeEvent(scaleTrack, id);
   }
 
+  /**
+   * Moves the scale marker `id` to `beat`, keeping its id/root/mode —
+   * distinct from upsertScaleEvent's add-or-replace because a move must
+   * remove the event from its *old* beat first, then re-place it (via
+   * upsertEvent's own replace-at-beat semantics if `beat` is already
+   * occupied by a different marker). A no-op (no history entry) when the
+   * target beat is unchanged, so a drag that snaps back to its start
+   * doesn't pollute the undo stack.
+   */
+  function moveScaleEvent(id: string, beat: number) {
+    const existing = scaleTrack.find((e) => e.id === id);
+    if (!existing || existing.beat === beat) return;
+    recordHistory('Move scale marker');
+    scaleTrack = upsertEvent(removeEvent(scaleTrack, id), { ...existing, beat: Math.max(0, beat) });
+  }
+
   // ── Undo / Redo ───────────────────────────────────────────────────────────
 
   /** After restoring `notes` from a history entry, drop selection ids that no longer exist. */
@@ -582,6 +598,7 @@ export function createStore() {
     executeCommand,
     upsertScaleEvent,
     removeScaleEvent,
+    moveScaleEvent,
   };
 }
 

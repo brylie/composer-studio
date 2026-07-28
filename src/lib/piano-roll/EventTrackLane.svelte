@@ -15,6 +15,8 @@
     marker: Snippet<[T]>;
     onAddAt: (beat: number) => void;
     onSelect: (event: T) => void;
+    /** Called once, on drop, after a marker has been dragged past the move threshold. */
+    onMove: (event: T, beat: number) => void;
   }
 
   const {
@@ -29,20 +31,66 @@
     marker,
     onAddAt,
     onSelect,
+    onMove,
   }: Props = $props();
 
   const width = $derived(totalBeats * pixelsPerBeat);
 
+  function snapBeat(beat: number): number {
+    return Math.max(0, Math.round(beat / snapBeats) * snapBeats);
+  }
+
   function handleTrackPointerDown(e: PointerEvent) {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const beat = (e.clientX - rect.left) / pixelsPerBeat;
-    const snapped = Math.max(0, Math.round(beat / snapBeats) * snapBeats);
-    onAddAt(snapped);
+    onAddAt(snapBeat(beat));
   }
 
-  function handleMarkerClick(e: MouseEvent, event: T) {
+  // ── Marker drag-to-move ──────────────────────────────────────────────────
+  // Pointer events (not click) for the same reason NoteGrid's note-dragging
+  // uses them: a threshold disambiguates "click to edit" from "drag to move"
+  // rather than treating every mousedown+mouseup as a click. The store isn't
+  // touched until drop — a marker occupying the target beat is only replaced
+  // on release (upsertEvent's replace-at-beat semantics, timeline.md), not
+  // transiently while merely passing over it mid-drag.
+  const DRAG_THRESHOLD_PX = 4;
+  let draggingId: string | null = $state(null);
+  let dragPreviewBeat = $state(0);
+  let dragStartClientX = 0;
+  let dragStartBeat = 0;
+  let didDrag = false;
+
+  function handleMarkerPointerDown(e: PointerEvent, event: T) {
     e.stopPropagation();
-    onSelect(event);
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    draggingId = event.id;
+    dragPreviewBeat = event.beat;
+    dragStartClientX = e.clientX;
+    dragStartBeat = event.beat;
+    didDrag = false;
+  }
+
+  function handleMarkerPointerMove(e: PointerEvent) {
+    if (draggingId === null) return;
+    const deltaX = e.clientX - dragStartClientX;
+    if (Math.abs(deltaX) > DRAG_THRESHOLD_PX) didDrag = true;
+    if (!didDrag) return;
+    dragPreviewBeat = snapBeat(dragStartBeat + deltaX / pixelsPerBeat);
+  }
+
+  function handleMarkerPointerUp(e: PointerEvent, event: T) {
+    if (draggingId !== event.id) return;
+    const target = e.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(e.pointerId)) {
+      target.releasePointerCapture(e.pointerId);
+    }
+    if (didDrag) {
+      onMove(event, dragPreviewBeat);
+    } else {
+      onSelect(event);
+    }
+    draggingId = null;
+    didDrag = false;
   }
 </script>
 
@@ -54,18 +102,21 @@
   style="grid-row: {row}; width: {width}px; height: {height}px; top: {stickyTop}px;"
   onpointerdown={handleTrackPointerDown}
   role="group"
-  aria-label="{label} track: click empty space to add a marker, click a marker to edit it"
+  aria-label="{label} track: click empty space to add a marker, drag a marker to move it, click a marker to edit it"
 >
   {#each events as event (event.id)}
+    {@const left = (draggingId === event.id ? dragPreviewBeat : event.beat) * pixelsPerBeat}
     <button
       type="button"
       class="lane-marker"
-      style="left: {event.beat * pixelsPerBeat}px;"
+      class:dragging={draggingId === event.id}
+      style="left: {left}px;"
       onpointerdown={(e) => {
-        e.stopPropagation();
+        handleMarkerPointerDown(e, event);
       }}
-      onclick={(e) => {
-        handleMarkerClick(e, event);
+      onpointermove={handleMarkerPointerMove}
+      onpointerup={(e) => {
+        handleMarkerPointerUp(e, event);
       }}
     >
       {@render marker(event)}
@@ -116,7 +167,7 @@
     font-size: 10px;
     font-weight: 600;
     white-space: nowrap;
-    cursor: pointer;
+    cursor: grab;
     transition:
       background 0.12s,
       border-color 0.12s;
@@ -125,5 +176,13 @@
   .lane-marker:hover {
     background: #2e2e58;
     border-color: #6b6bd9;
+  }
+
+  .lane-marker.dragging {
+    cursor: grabbing;
+    background: #2e2e58;
+    border-color: #8f8fff;
+    z-index: 1;
+    transition: none;
   }
 </style>

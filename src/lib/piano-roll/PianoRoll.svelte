@@ -48,6 +48,10 @@
     scaleEditorTarget = null;
   }
 
+  function moveScaleEvent(event: ScaleEvent, beat: number) {
+    store.moveScaleEvent(event.id, beat);
+  }
+
   // Derived playhead X position — null when not playing (disables auto-scroll)
   const autoScrollX = $derived(store.isPlaying ? store.currentBeat * store.pixelsPerBeat : null);
 
@@ -173,6 +177,7 @@
             height={SCALE_LANE_HEIGHT}
             onAddAt={openScaleEditorAt}
             onSelect={openScaleEditorFor}
+            onMove={moveScaleEvent}
           >
             {#snippet marker(event: ScaleEvent)}
               {NOTE_NAMES[event.root]} {event.mode}
