@@ -197,7 +197,7 @@ real payoff — multi-voice selection across layers — only lands here.
 - **[testing-strategy.md](./testing-strategy.md)** — tests land with each
   phase's PRs; the 80% coverage gate is worth actually wiring up around the
   end of Phase 2, once the registry/history/selection logic it targets
-  exists in volume.
+  exists in volume. Include significant E2E tests for key flows (priority use case, undo/redo, save/reload) and the most complex UI interactions.
 - **[performance.md](./performance.md)** — explicitly trigger-condition-based
   (real lag observed, not a hypothetical). Shouldn't be preemptively
   addressed by this roadmap.
