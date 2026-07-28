@@ -9,6 +9,10 @@ export interface ParamFieldBase {
   // the current in-progress values on every change, hiding the field when
   // it returns false.
   showIf?: (values: Record<string, unknown>) => boolean;
+  // Omitted = the drawer seeds this field from `default` when opened.
+  // Present = seeded from this instead, computed against the live
+  // CommandContext (e.g. a value relative to the current playhead).
+  getDefault?: (ctx: CommandContext) => unknown;
 }
 
 export type ParamField =

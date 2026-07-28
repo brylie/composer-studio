@@ -45,11 +45,18 @@ test.describe('Chord lane', () => {
     const box = await requireBoundingBox(track);
     await track.click({ position: { x: box.width - 2, y: box.height / 2 } });
 
-    const readout = page.locator('.beat-readout');
-    await expect(readout).toBeVisible();
-    const text = await readout.textContent();
-    const beat = Number(text?.replace('Beat ', ''));
-    expect(beat).toBeLessThan(64); // default totalBeats — the lane's own half-open upper bound
+    await page.locator('#chord-root').selectOption('0'); // C
+    await page.locator('#chord-quality').selectOption('maj');
+    await page.getByRole('button', { name: 'Add marker' }).click();
+
+    // Assert against the persisted marker's rendered position, not the
+    // draft editor's beat readout — this is what actually proves the
+    // clamp applied to the saved event, not just the in-progress form.
+    await expect(track.locator('.lane-marker')).toHaveCount(1);
+    const marker = track.locator('.lane-marker').first();
+    const markerBox = await requireBoundingBox(marker);
+    const laneBox = await requireBoundingBox(track);
+    expect(markerBox.x).toBeLessThan(laneBox.x + laneBox.width);
   });
 
   test('adding a chord marker renders it with the root + quality label', async ({ page }) => {
