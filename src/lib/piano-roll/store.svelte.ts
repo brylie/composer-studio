@@ -468,13 +468,17 @@ export function createStore() {
   }
 
   function updateArrangerSection(id: string, updates: { label: string; color: string }) {
+    const next = updateSection(arrangerTrack, id, updates);
+    if (next === arrangerTrack) return;
     recordHistory('Rename section');
-    arrangerTrack = updateSection(arrangerTrack, id, updates);
+    arrangerTrack = next;
   }
 
   function removeArrangerSection(id: string) {
+    const next = removeArrangerSectionFromTrack(arrangerTrack, id);
+    if (next === arrangerTrack) return;
     recordHistory('Remove section');
-    arrangerTrack = removeArrangerSectionFromTrack(arrangerTrack, id);
+    arrangerTrack = next;
   }
 
   // ── Undo / Redo ───────────────────────────────────────────────────────────

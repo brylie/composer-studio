@@ -212,10 +212,14 @@ export function updateSection(
   id: string,
   updates: { label: string; color: string },
 ): ArrangerTrack {
+  const section = track.find((s) => s.id === id);
+  if (!section) return track;
+  if (section.label === updates.label && section.color === updates.color) return track;
   return track.map((s) => (s.id === id ? { ...s, ...updates } : s));
 }
 
 /** Removes section `id`, if present (tracks.md: "...delete via tap"). */
 export function removeSection(track: ArrangerTrack, id: string): ArrangerTrack {
+  if (!track.some((s) => s.id === id)) return track;
   return track.filter((s) => s.id !== id);
 }

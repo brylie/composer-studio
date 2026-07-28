@@ -217,6 +217,18 @@
     resizingEdge = null;
   }
 
+  /** Arrow-key resizing by one grid step — the keyboard equivalent of dragging a handle. */
+  function handleResizeKeydown(e: KeyboardEvent, section: ArrangerSection, edge: 'start' | 'end') {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const delta = e.key === 'ArrowLeft' ? -snapBeats : snapBeats;
+    if (edge === 'start') {
+      onResizeStart(section, section.startBeat + delta);
+    } else {
+      onResizeEnd(section, section.endBeat + delta);
+    }
+  }
+
   /** The [start, end) a section should render at right now, previewing whatever drag/resize is in progress on it. */
   function previewBounds(section: ArrangerSection): { start: number; end: number } {
     if (draggingId === section.id) {
@@ -287,6 +299,9 @@
         onpointercancel={(e) => {
           handleResizePointerCancel(e, section);
         }}
+        onkeydown={(e) => {
+          handleResizeKeydown(e, section, 'start');
+        }}
       ></button>
       <span class="section-label">{section.label}</span>
       <button
@@ -302,6 +317,9 @@
         }}
         onpointercancel={(e) => {
           handleResizePointerCancel(e, section);
+        }}
+        onkeydown={(e) => {
+          handleResizeKeydown(e, section, 'end');
         }}
       ></button>
     </div>
