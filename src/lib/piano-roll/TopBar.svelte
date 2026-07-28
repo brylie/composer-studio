@@ -93,6 +93,18 @@
     >
       <Icon name="sound" />
     </button>
+    <button
+      class="icon-btn"
+      class:active={ribbonUi.layerPanelOpen}
+      onclick={() => {
+        ribbonUi.layerPanelOpen = !ribbonUi.layerPanelOpen;
+      }}
+      aria-pressed={ribbonUi.layerPanelOpen}
+      aria-label={ribbonUi.layerPanelOpen ? 'Close layer panel' : 'Open layer panel'}
+      title="Layers"
+    >
+      <Icon name="layers" />
+    </button>
   </div>
 </header>
 

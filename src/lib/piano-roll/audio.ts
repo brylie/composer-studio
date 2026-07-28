@@ -2,30 +2,40 @@ import * as Tone from 'tone';
 import type { Note, SynthSettings } from './types.js';
 import { midiToFreq } from './types.js';
 
-// ── Shared instrument (libraries.md#mvp-default-instrument-tonepolysynth-over-tonesynth) ──
+// ── Per-layer instruments (layers.md#audio) ─────────────────────────────────
 //
-// One Tone.PolySynth("piano") for the whole document, routed through a single
-// shared post-synth Tone.Filter — not a per-voice filter, matching the Sound
-// drawer's one Cutoff/Resonance pair. Created lazily since Tone can't touch
-// the audio context before a user gesture.
+// One Tone.PolySynth("piano") per layer, each routed through its own
+// post-synth Tone.Filter — layers.md: "One Tone.Sampler/Tone.PolySynth
+// instance per layer, each built from that layer's instrument settings."
+// Instances are keyed by layerId and created lazily (per layer, since Tone
+// can't touch the audio context before a user gesture, same as the
+// pre-layers single-instrument version this replaces).
 
-let _piano: Tone.PolySynth | null = null;
-let _filter: Tone.Filter | null = null;
-let _filterEnabled = false;
-/** Last settings fully applied to the shared instrument, so unchanged settings can be skipped. Reset to null whenever the instrument is recreated. */
-let _lastSettings: SynthSettings | null = null;
-
-function getPiano(): { piano: Tone.PolySynth; filter: Tone.Filter } {
-  if (!_piano || !_filter) {
-    _filter = new Tone.Filter({ frequency: 4000, Q: 1, type: 'lowpass' }).toDestination();
-    _piano = new Tone.PolySynth(Tone.Synth).toDestination();
-  }
-  return { piano: _piano, filter: _filter };
+interface Instrument {
+  synth: Tone.PolySynth;
+  filter: Tone.Filter;
+  filterEnabled: boolean;
+  /** Last settings fully applied to this instance, so unchanged settings can be skipped. */
+  lastSettings: SynthSettings | null;
 }
 
-function applySettings(settings: SynthSettings): void {
-  const { piano, filter } = getPiano();
-  const last = _lastSettings;
+const _instruments = new Map<string, Instrument>();
+
+function getInstrument(layerId: string): Instrument {
+  let instrument = _instruments.get(layerId);
+  if (!instrument) {
+    const filter = new Tone.Filter({ frequency: 4000, Q: 1, type: 'lowpass' }).toDestination();
+    const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+    instrument = { synth, filter, filterEnabled: false, lastSettings: null };
+    _instruments.set(layerId, instrument);
+  }
+  return instrument;
+}
+
+function applySettings(layerId: string, settings: SynthSettings): Instrument {
+  const instrument = getInstrument(layerId);
+  const { synth, filter } = instrument;
+  const last = instrument.lastSettings;
 
   if (
     last !== null &&
@@ -37,13 +47,13 @@ function applySettings(settings: SynthSettings): void {
     last.envelope.release === settings.envelope.release &&
     last.filter.cutoff === settings.filter.cutoff &&
     last.filter.resonance === settings.filter.resonance &&
-    settings.filter.enabled === _filterEnabled
+    settings.filter.enabled === instrument.filterEnabled
   ) {
-    return;
+    return instrument;
   }
 
   if (last?.waveform !== settings.waveform) {
-    piano.set({ oscillator: { type: settings.waveform } });
+    synth.set({ oscillator: { type: settings.waveform } });
   }
   if (
     last?.envelope.attack !== settings.envelope.attack ||
@@ -51,10 +61,10 @@ function applySettings(settings: SynthSettings): void {
     last.envelope.sustain !== settings.envelope.sustain ||
     last.envelope.release !== settings.envelope.release
   ) {
-    piano.set({ envelope: settings.envelope });
+    synth.set({ envelope: settings.envelope });
   }
   if (last?.volume !== settings.volume) {
-    piano.volume.value = Tone.gainToDb(Math.max(0.0001, settings.volume / 100));
+    synth.volume.value = Tone.gainToDb(Math.max(0.0001, settings.volume / 100));
   }
   if (last?.filter.cutoff !== settings.filter.cutoff) {
     filter.frequency.value = settings.filter.cutoff;
@@ -63,35 +73,57 @@ function applySettings(settings: SynthSettings): void {
     filter.Q.value = settings.filter.resonance;
   }
 
-  if (settings.filter.enabled !== _filterEnabled) {
-    _filterEnabled = settings.filter.enabled;
-    piano.disconnect();
-    if (_filterEnabled) {
-      piano.connect(filter);
+  if (settings.filter.enabled !== instrument.filterEnabled) {
+    instrument.filterEnabled = settings.filter.enabled;
+    synth.disconnect();
+    if (instrument.filterEnabled) {
+      synth.connect(filter);
     } else {
-      piano.toDestination();
+      synth.toDestination();
     }
   }
 
-  _lastSettings = settings;
+  instrument.lastSettings = settings;
+  return instrument;
 }
 
 export function triggerNote(
+  layerId: string,
   midiNote: number,
   settings: SynthSettings,
   durationSec: number,
   atTime: number,
 ): void {
-  applySettings(settings);
-  const { piano } = getPiano();
-  piano.triggerAttackRelease(midiToFreq(midiNote), durationSec, atTime);
+  const { synth } = applySettings(layerId, settings);
+  synth.triggerAttackRelease(midiToFreq(midiNote), durationSec, atTime);
 }
 
-export function auditionNote(midiNote: number, settings: SynthSettings): void {
+export function auditionNote(layerId: string, midiNote: number, settings: SynthSettings): void {
   void Tone.start();
-  applySettings(settings);
-  const { piano } = getPiano();
-  piano.triggerAttackRelease(midiToFreq(midiNote), 0.5);
+  const { synth } = applySettings(layerId, settings);
+  synth.triggerAttackRelease(midiToFreq(midiNote), 0.5);
+}
+
+/**
+ * Disposes a single layer's synth/filter and drops its map entry — called
+ * when a layer is deleted (store.svelte.ts's removeLayer) so an audition-only
+ * or playback instrument for a since-deleted layer doesn't linger forever.
+ */
+export function disposeLayer(layerId: string): void {
+  const instrument = _instruments.get(layerId);
+  if (!instrument) return;
+  instrument.synth.dispose();
+  instrument.filter.dispose();
+  _instruments.delete(layerId);
+}
+
+/** Disposes every layer's instrument, regardless of playback state. */
+function disposeAllInstruments(): void {
+  for (const instrument of _instruments.values()) {
+    instrument.synth.dispose();
+    instrument.filter.dispose();
+  }
+  _instruments.clear();
 }
 
 // ── Playback scheduler ───────────────────────────────────────────────────────
@@ -105,7 +137,8 @@ export function auditionNote(midiNote: number, settings: SynthSettings): void {
 
 export interface PlaybackOptions {
   getNotes: () => Note[];
-  getSettings: () => SynthSettings;
+  /** Looks up the instrument settings for a given note's layer (layers.md#audio) — one instrument per layer, not one document-wide instrument. */
+  getLayerSettings: (layerId: string) => SynthSettings;
   getTempo: () => number;
   getTotalBeats: () => number;
   getLoopEnabled: () => boolean;
@@ -145,7 +178,7 @@ export function startPlayback(options: PlaybackOptions): void {
 
   function scan(time: number): void {
     if (!_options) return;
-    const { getNotes, getSettings, getTempo, getTotalBeats, getLoopEnabled } = _options;
+    const { getNotes, getLayerSettings, getTempo, getTotalBeats, getLoopEnabled } = _options;
 
     transport.bpm.value = getTempo();
     const totalBeats = Math.max(0.001, getTotalBeats());
@@ -154,8 +187,12 @@ export function startPlayback(options: PlaybackOptions): void {
     transport.loopStart = 0;
     transport.loopEnd = totalBeats * (60 / transport.bpm.value);
 
-    applySettings(getSettings());
-    const { piano } = getPiano();
+    const notes = getNotes();
+    // One instrument per layer (layers.md#audio) — refresh every layer
+    // represented in this pass's notes, not just a single shared instrument.
+    for (const layerId of new Set(notes.map((n) => n.layerId))) {
+      applySettings(layerId, getLayerSettings(layerId));
+    }
 
     const bps = transport.bpm.value / 60;
     const currentBeat = transport.getTicksAtTime(time) / transport.PPQ;
@@ -164,8 +201,6 @@ export function startPlayback(options: PlaybackOptions): void {
     for (const [key, pass] of _scheduled) {
       if (pass < _loopPass) _scheduled.delete(key);
     }
-
-    const notes = getNotes();
 
     function scheduleWindow(windowStart: number, windowStop: number, pass: number): void {
       for (const note of notes) {
@@ -177,7 +212,8 @@ export function startPlayback(options: PlaybackOptions): void {
         const beatsFromNow = note.startBeat - currentBeat + (pass - _loopPass) * totalBeats;
         const noteTime = time + beatsFromNow / bps;
         const durationSec = note.durationBeats / bps;
-        piano.triggerAttackRelease(midiToFreq(note.midiNote), durationSec, noteTime);
+        const { synth } = getInstrument(note.layerId);
+        synth.triggerAttackRelease(midiToFreq(note.midiNote), durationSec, noteTime);
       }
     }
 
@@ -211,29 +247,31 @@ export function startPlayback(options: PlaybackOptions): void {
 }
 
 export function stopPlayback(): void {
-  // Guard against touching Tone's global transport when nothing is playing —
-  // e.g. Toolbar's onDestroy calls this unconditionally, and onDestroy also
-  // runs during SSR (unlike onMount), where there's no AudioContext at all.
-  if (_options === null && _scheduleEventId === null && _rafId === null) return;
-
-  const transport = Tone.getTransport();
-  if (_scheduleEventId !== null) {
-    transport.clear(_scheduleEventId);
-    _scheduleEventId = null;
+  // Guard the transport-touching calls (not instrument disposal below) when
+  // nothing is playing — e.g. Toolbar's onDestroy calls this unconditionally,
+  // and onDestroy also runs during SSR (unlike onMount), where there's no
+  // AudioContext at all.
+  const transportActive = _options !== null || _scheduleEventId !== null || _rafId !== null;
+  if (transportActive) {
+    const transport = Tone.getTransport();
+    if (_scheduleEventId !== null) {
+      transport.clear(_scheduleEventId);
+      _scheduleEventId = null;
+    }
+    transport.off('loop', handleTransportLoop);
+    transport.stop();
   }
-  transport.off('loop', handleTransportLoop);
-  transport.stop();
 
   // releaseAll() follows the configured release envelope (up to 4s, per the
   // Sound drawer), so it can't guarantee immediate silence — including for
-  // attacks already scheduled inside the lookahead window. Disposing the
-  // shared instrument forces a hard cutoff regardless of envelope/schedule;
-  // getPiano()/applySettings() lazily recreate and fully reconfigure it
-  // (oscillator, envelope, volume, filter routing) on the next trigger.
-  _piano?.dispose();
-  _piano = null;
-  _filterEnabled = false;
-  _lastSettings = null;
+  // attacks already scheduled inside the lookahead window. Disposing every
+  // layer's instrument forces a hard cutoff regardless of envelope/schedule;
+  // getInstrument()/applySettings() lazily recreate and fully reconfigure
+  // each one (oscillator, envelope, volume, filter routing) on next trigger.
+  // Unconditional (not gated on transportActive) so audition-only instruments
+  // — created without ever starting playback — are cleared too, e.g. on
+  // editor teardown.
+  disposeAllInstruments();
 
   if (_rafId !== null) {
     cancelAnimationFrame(_rafId);

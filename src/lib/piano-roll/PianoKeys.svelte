@@ -62,7 +62,7 @@
       class:active
       style="height: {store.rowHeight}px;"
       onclick={() => {
-        auditionNote(midi, store.synthSettings);
+        auditionNote(store.activeLayerId, midi, store.synthSettings);
       }}
       aria-label={noteName(midi)}
     >

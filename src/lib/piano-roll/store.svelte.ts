@@ -8,8 +8,15 @@ import {
   resizeSectionStart,
   updateSection,
 } from './arranger.js';
+import { disposeLayer } from './audio.js';
 import { commandRegistry } from './commands/index.js';
 import { CommandHistory, isContiguous } from './history.js';
+import {
+  createDefaultLayer,
+  isLayerSelectable,
+  moveLayer as moveLayerInStack,
+  nextLayerColor,
+} from './layers.js';
 import type {
   ChordEvent,
   ChordTrack,
@@ -30,13 +37,14 @@ import type {
   DocumentSnapshot,
   GridInteractionMode,
   Layer,
+  LayerStack,
   Note,
   SelectionAnchor,
   SelectionContext,
   SnapDenominator,
   SynthSettings,
 } from './types.js';
-import { clampNote } from './types.js';
+import { clampNote, DEFAULT_SYNTH } from './types.js';
 
 export { CommandHistory, isContiguous };
 
@@ -87,13 +95,6 @@ function createEventTrackMutators<T extends TimelineEvent>(
   return { upsert, remove, move };
 }
 
-const DEFAULT_SYNTH: SynthSettings = {
-  waveform: 'triangle',
-  volume: 90,
-  envelope: { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 },
-  filter: { enabled: false, cutoff: 2000, resonance: 1 },
-};
-
 // ── Store factory ──────────────────────────────────────────────────────────────
 
 export function createStore() {
@@ -107,9 +108,26 @@ export function createStore() {
   let totalBeats = $state(64); // 16 bars x 4 beats
   let pixelsPerBeat = $state(80);
   const rowHeight = $state(24);
-  let synthSettings: SynthSettings = $state(structuredClone(DEFAULT_SYNTH));
   let trackName = $state('Untitled Track');
   let interactionMode: GridInteractionMode = $state('draw');
+
+  // ── Layers (layers.md) ──────────────────────────────────────────────────
+  // Instruments as layers over the single shared Note[]/timeline, not
+  // separate tracks — see layers.md's resolution. Starts with one default
+  // layer wrapping what used to be the document-wide synthSettings, so
+  // every note (including ones created before any layer UI exists) always
+  // has a real layer to land on.
+  const initialLayer = createDefaultLayer(structuredClone(DEFAULT_SYNTH));
+  let layers: LayerStack = $state([initialLayer]);
+  let activeLayerId = $state(initialLayer.id);
+
+  function layerFor(layerId: string): Layer | undefined {
+    return layers.find((l) => l.id === layerId);
+  }
+
+  function activeLayer(): Layer | undefined {
+    return layerFor(activeLayerId);
+  }
 
   // ── Timeline event tracks (timeline.md, tracks.md) ─────────────────────────
   // Single event at beat 0 by default — "a project with no further events
@@ -162,8 +180,13 @@ export function createStore() {
   // ── Derived SelectionContext ──────────────────────────────────────────────
 
   const selectionContext = $derived.by((): SelectionContext => {
+    // Layer visibility/lock gate the *effective* selection continuously
+    // (selection.md#selectioncontext--what-transformations-actually-read):
+    // if a selected note's layer is later hidden/locked without the
+    // selection itself changing, it must drop out of this derivation, not
+    // just be excluded at the moment it was clicked.
     const selected = notes
-      .filter((n) => selectedNoteIds.has(n.id))
+      .filter((n) => selectedNoteIds.has(n.id) && isLayerSelectable(layerFor(n.layerId)))
       .sort((a, b) => a.startBeat - b.startBeat || a.midiNote - b.midiNote);
 
     const count = selected.length;
@@ -196,6 +219,13 @@ export function createStore() {
         }))
       : [];
 
+    // Distinct layers referenced by the (already-filtered) selection, in
+    // panel/z-order — selection.md#activelayers-selection-spans-layers-freely-by-design.
+    // Each layer in `layers` is visited once, so no separate dedup set is
+    // needed: the `some()` check alone guarantees each qualifying layer is
+    // pushed at most once.
+    const activeLayers = layers.filter((layer) => selected.some((n) => n.layerId === layer.id));
+
     return {
       notes: selected,
       count,
@@ -203,7 +233,7 @@ export function createStore() {
       beatRange,
       isContiguous: isContiguous(selected),
       activeScales,
-      activeLayers: [] as Layer[], // Phase 10 stub
+      activeLayers,
     };
   });
 
@@ -214,6 +244,7 @@ export function createStore() {
     allNotes: notes,
     playhead: currentBeat,
     chordTrack,
+    activeLayerId,
   }));
 
   // ── Internal helpers ──────────────────────────────────────────────────────
@@ -232,7 +263,20 @@ export function createStore() {
       chordEvents: $state.snapshot(chordTrack),
       labelEvents: $state.snapshot(labelTrack),
       arrangerSections: $state.snapshot(arrangerTrack),
+      layers: $state.snapshot(layers),
     };
+  }
+
+  /**
+   * After restoring `layers` from a history entry, `activeLayerId` (presentation
+   * state, not part of the snapshot per layers.md) may point at a layer that
+   * undo/redo just removed — fall back to the new topmost layer rather than
+   * leaving it dangling.
+   */
+  function revalidateActiveLayer() {
+    if (!layers.some((l) => l.id === activeLayerId)) {
+      activeLayerId = layers[0].id;
+    }
   }
 
   function recordHistory(label: string) {
@@ -302,7 +346,11 @@ export function createStore() {
   }
 
   function selectAll() {
-    for (const n of notes) selectedNoteIds.add(n.id);
+    // layers.md#rendering-and-interaction-rules: select-all only reaches
+    // notes on visible, unlocked layers, same as click/marquee.
+    for (const n of notes) {
+      if (isLayerSelectable(layerFor(n.layerId))) selectedNoteIds.add(n.id);
+    }
   }
 
   function deselectAll() {
@@ -353,19 +401,25 @@ export function createStore() {
   }
 
   function deleteSelected() {
-    if (selectedNoteIds.size === 0) return;
+    // Gate on selectionContext.notes, not raw selectedNoteIds — a selected
+    // note whose layer is now hidden/locked isn't part of the effective
+    // selection (selection.md#selectioncontext) and must survive Delete.
+    const eligible = selectionContext.notes;
+    if (eligible.length === 0) return;
     recordHistory('Delete selected');
-    notes = notes.filter((n) => !selectedNoteIds.has(n.id));
-    selectedNoteIds.clear();
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain lookup passed straight to the filter below, discarded immediately, never read reactively
+    const idsToDelete = new Set(eligible.map((n) => n.id));
+    notes = notes.filter((n) => !idsToDelete.has(n.id));
+    pruneSelectionToExistingNotes();
     selectionAnchor = null;
   }
 
   // ── Clipboard ─────────────────────────────────────────────────────────────
 
   function copy() {
-    const selected = notes
-      .filter((n) => selectedNoteIds.has(n.id))
-      .sort((a, b) => a.startBeat - b.startBeat);
+    // Same layer-gating as deleteSelected — a locked/hidden-layer note that's
+    // still in selectedNoteIds shouldn't be copyable via Ctrl/Cmd+C.
+    const selected = selectionContext.notes;
     if (selected.length === 0) return;
     const earliest = selected[0].startBeat;
     clipboard = {
@@ -377,7 +431,15 @@ export function createStore() {
     if (!clipboard || clipboard.notes.length === 0) return;
     recordHistory('Paste');
     const newNotes = clipboard.notes.map((n) =>
-      clampNote({ ...n, id: crypto.randomUUID(), startBeat: n.startBeat + atBeat }),
+      clampNote({
+        ...n,
+        id: crypto.randomUUID(),
+        startBeat: n.startBeat + atBeat,
+        // layers.md#clipboard-preserve-layer-membership-across-copypaste:
+        // stay on the original layer; fall back to the active layer only if
+        // that layer was deleted between copy and paste.
+        layerId: layerFor(n.layerId) ? n.layerId : activeLayerId,
+      }),
     );
     notes = [...notes, ...newNotes];
     for (const n of newNotes) extendTotalBeatsIfNeeded(n);
@@ -481,6 +543,75 @@ export function createStore() {
     arrangerTrack = next;
   }
 
+  // ── Layers (layers.md) ────────────────────────────────────────────────────
+  // Add/remove/rename/reorder/visibility/lock are document mutations — same
+  // tier as arranger-section edits above — recorded through history like
+  // every other track mutator. setActiveLayer is presentation/working state
+  // (layers.md#active-layer) and deliberately isn't.
+
+  function addLayer() {
+    recordHistory('Add layer');
+    const layer: Layer = {
+      id: crypto.randomUUID(),
+      name: `Layer ${String(layers.length + 1)}`,
+      instrument: structuredClone(DEFAULT_SYNTH),
+      color: nextLayerColor(layers),
+      visible: true,
+      locked: false,
+    };
+    layers = [layer, ...layers];
+    activeLayerId = layer.id;
+  }
+
+  /**
+   * Removes layer `id` and every note on it, in one history entry — the
+   * Photoshop analogy layers.md draws throughout (delete a layer, delete its
+   * content). No-ops when `id` is the only layer left: there must always be
+   * at least one layer for a new note to land on.
+   */
+  function removeLayer(id: string) {
+    if (layers.length <= 1) return;
+    if (!layers.some((l) => l.id === id)) return;
+    recordHistory('Remove layer');
+    layers = layers.filter((l) => l.id !== id);
+    notes = notes.filter((n) => n.layerId !== id);
+    pruneSelectionToExistingNotes();
+    revalidateActiveLayer();
+    disposeLayer(id);
+  }
+
+  function renameLayer(id: string, name: string) {
+    const layer = layerFor(id);
+    if (!layer || layer.name === name) return;
+    recordHistory('Rename layer');
+    layer.name = name;
+  }
+
+  function setLayerVisible(id: string, visible: boolean) {
+    const layer = layerFor(id);
+    if (!layer || layer.visible === visible) return;
+    recordHistory(visible ? 'Show layer' : 'Hide layer');
+    layer.visible = visible;
+  }
+
+  function setLayerLocked(id: string, locked: boolean) {
+    const layer = layerFor(id);
+    if (!layer || layer.locked === locked) return;
+    recordHistory(locked ? 'Lock layer' : 'Unlock layer');
+    layer.locked = locked;
+  }
+
+  function moveLayer(id: string, toIndex: number) {
+    const next = moveLayerInStack(layers, id, toIndex);
+    if (next === layers) return;
+    recordHistory('Reorder layers');
+    layers = next;
+  }
+
+  function setActiveLayer(id: string) {
+    if (layerFor(id)) activeLayerId = id;
+  }
+
   // ── Undo / Redo ───────────────────────────────────────────────────────────
 
   /** After restoring `notes` from a history entry, drop selection ids that no longer exist. */
@@ -501,7 +632,9 @@ export function createStore() {
     chordTrack = entry.chordEvents;
     labelTrack = entry.labelEvents;
     arrangerTrack = entry.arrangerSections;
+    layers = entry.layers;
     pruneSelectionToExistingNotes();
+    revalidateActiveLayer();
   }
 
   function redo() {
@@ -513,7 +646,9 @@ export function createStore() {
     chordTrack = entry.chordEvents;
     labelTrack = entry.labelEvents;
     arrangerTrack = entry.arrangerSections;
+    layers = entry.layers;
     pruneSelectionToExistingNotes();
+    revalidateActiveLayer();
   }
 
   // ── Commands (transformations.md) ─────────────────────────────────
@@ -660,12 +795,27 @@ export function createStore() {
       return activeEventAt(chordTrack, beat);
     },
 
+    /** Proxies the *active layer's* instrument (layers.md) — not a document-wide setting anymore. */
     get synthSettings() {
-      return synthSettings;
+      return activeLayer()?.instrument ?? DEFAULT_SYNTH;
     },
     set synthSettings(v: SynthSettings) {
-      synthSettings = v;
+      const layer = activeLayer();
+      if (layer) layer.instrument = v;
     },
+
+    get layers() {
+      return layers;
+    },
+
+    get activeLayerId() {
+      return activeLayerId;
+    },
+    set activeLayerId(v: string) {
+      setActiveLayer(v);
+    },
+
+    layerFor,
 
     get trackName() {
       return trackName;
@@ -762,6 +912,12 @@ export function createStore() {
     resizeArrangerSectionEnd,
     updateArrangerSection,
     removeArrangerSection,
+    addLayer,
+    removeLayer,
+    renameLayer,
+    setLayerVisible,
+    setLayerLocked,
+    moveLayer,
   };
 }
 

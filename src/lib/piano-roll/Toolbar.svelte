@@ -3,6 +3,7 @@
   import { getEditorState } from './context.svelte.js';
   const { store } = getEditorState();
   import { startPlayback, stopPlayback } from './audio.js';
+  import { DEFAULT_SYNTH } from './types.js';
 
   const SNAP_OPTIONS = [1, 2, 4, 8, 16] as const;
 
@@ -21,7 +22,7 @@
       store.isPlaying = true;
       startPlayback({
         getNotes: () => store.notes,
-        getSettings: () => store.synthSettings,
+        getLayerSettings: (layerId) => store.layerFor(layerId)?.instrument ?? DEFAULT_SYNTH,
         getTempo: () => store.tempo,
         getTotalBeats: () => store.totalBeats,
         getLoopEnabled: () => store.loopEnabled,

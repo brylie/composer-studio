@@ -4,7 +4,20 @@
   import { isBlackKey, MIN_MIDI, MAX_MIDI, NOTE_COUNT } from './types.js';
   import type { Note } from './types.js';
   import { auditionNote } from './audio.js';
+  import { firstSelectableLayer, isLayerSelectable } from './layers.js';
   import { harmonySegments, scaleSegments } from './tracks.js';
+
+  // layers.md#rendering-and-interaction-rules: hidden-layer notes never
+  // render at all; visible notes paint bottom-of-stack first, topmost layer
+  // last, so an overlapping topmost-layer note visually wins — purely a
+  // rendering concern, doesn't touch store.notes or playback.
+  const renderedNotes = $derived.by(() => {
+    const layerIndex = new Map(store.layers.map((l, i) => [l.id, i]));
+    return store.notes
+      .filter((n) => store.layerFor(n.layerId)?.visible !== false)
+      .slice()
+      .sort((a, b) => (layerIndex.get(b.layerId) ?? -1) - (layerIndex.get(a.layerId) ?? -1));
+  });
 
   /** Shift or Ctrl/Cmd — the modifiers that mean "add to selection" rather than replace it. */
   function isAdditive(e: PointerEvent): boolean {
@@ -127,6 +140,10 @@
       const noteId = noteEl.dataset.noteId ?? '';
       const note = store.notes.find((n) => n.id === noteId);
       if (!note) return;
+      // layers.md#rendering-and-interaction-rules: a locked (or, in principle,
+      // hidden) layer's note absorbs the click without selecting/dragging it
+      // — not a fall-through to "create a note underneath it" in draw mode.
+      if (!isLayerSelectable(store.layerFor(note.layerId))) return;
 
       const isCurrentlySelected = store.selectedNoteIds.has(noteId);
 
@@ -283,27 +300,38 @@
   function handlePointerUp(e: PointerEvent) {
     if (dragMode === 'select') {
       if (pendingNoteCreate) {
-        // Click with no significant drag in draw mode → create a note
-        const { beat, row } = pendingNoteCreate;
-        const snappedBeat = snapFloor(beat);
-        const midi = midiForRow(Math.max(0, Math.min(NOTE_COUNT - 1, row)));
-        const id = generateId();
-        store.history.record('Add note');
-        store.addNote({
-          id,
-          midiNote: midi,
-          startBeat: snappedBeat,
-          durationBeats: store.snapBeats,
-          velocity: 100,
-        });
-        store.selectNote(id, isAdditive(e));
-        store.setAnchor(id);
-        auditionNote(midi, store.synthSettings);
+        // Click with no significant drag in draw mode → create a note. The
+        // active layer can itself be hidden/locked (layers.md's active-layer
+        // concept is independent of visibility/lock), which would otherwise
+        // land a new note somewhere invisible or immediately un-selectable —
+        // redirect to the topmost selectable layer instead, if one exists.
+        const targetLayer = isLayerSelectable(store.layerFor(store.activeLayerId))
+          ? store.layerFor(store.activeLayerId)
+          : firstSelectableLayer(store.layers);
+        if (targetLayer) {
+          const { beat, row } = pendingNoteCreate;
+          const snappedBeat = snapFloor(beat);
+          const midi = midiForRow(Math.max(0, Math.min(NOTE_COUNT - 1, row)));
+          const id = generateId();
+          store.history.record('Add note');
+          store.addNote({
+            id,
+            midiNote: midi,
+            startBeat: snappedBeat,
+            durationBeats: store.snapBeats,
+            velocity: 100,
+            layerId: targetLayer.id,
+          });
+          store.selectNote(id, isAdditive(e));
+          store.setAnchor(id);
+          auditionNote(targetLayer.id, midi, store.synthSettings);
+        }
       } else if (selRect) {
         // Rect drag → select all overlapping notes
         const rect = selRect;
         const toSelect = store.notes
           .filter((note) => {
+            if (!isLayerSelectable(store.layerFor(note.layerId))) return false;
             const nl = note.startBeat * store.pixelsPerBeat;
             const nr = nl + note.durationBeats * store.pixelsPerBeat;
             const nt = rowForMidi(note.midiNote) * store.rowHeight;
@@ -331,8 +359,11 @@
     e.preventDefault();
     const noteEl = (e.target as HTMLElement).closest<HTMLElement>('[data-note-id]');
     if (noteEl) {
+      const id = noteEl.dataset.noteId ?? '';
+      const note = store.notes.find((n) => n.id === id);
+      if (!note || !isLayerSelectable(store.layerFor(note.layerId))) return;
       store.history.record('Delete note');
-      store.removeNote(noteEl.dataset.noteId ?? '');
+      store.removeNote(id);
     }
   }
 </script>
@@ -395,19 +426,25 @@
     <div class="bar-line" style="left: {left}px; height: {totalHeight}px;"></div>
   {/each}
 
-  <!-- Notes -->
-  {#each store.notes as note (note.id)}
+  <!-- Notes: renderedNotes already excludes hidden-layer notes and is
+       ordered bottom-of-stack-first so a topmost-layer note paints on top
+       of an overlapping one (layers.md#rendering-and-interaction-rules). -->
+  {#each renderedNotes as note (note.id)}
     {@const noteLeft = note.startBeat * store.pixelsPerBeat}
     {@const noteTop = rowForMidi(note.midiNote) * store.rowHeight + 1}
     {@const noteW = Math.max(6, note.durationBeats * store.pixelsPerBeat - 2)}
     {@const noteH = store.rowHeight - 2}
+    {@const locked = store.layerFor(note.layerId)?.locked ?? false}
     <div
       data-note-id={note.id}
       class="note"
-      class:selected={store.selectedNoteIds.has(note.id)}
+      class:selected={store.selectedNoteIds.has(note.id) && !locked}
+      class:locked
       style="left: {noteLeft}px; top: {noteTop}px; width: {noteW}px; height: {noteH}px;"
     >
-      <div class="resize-handle" data-resize></div>
+      {#if !locked}
+        <div class="resize-handle" data-resize></div>
+      {/if}
     </div>
   {/each}
 
@@ -543,6 +580,22 @@
   }
   .note:active {
     cursor: grabbing;
+  }
+
+  /* layers.md#rendering-and-interaction-rules: visible+locked notes still
+     render (dimmed, with a lock affordance) but can't be selected/edited —
+     enforced in the pointer handlers, not via pointer-events:none, so a
+     click on one is absorbed rather than falling through to "create a note
+     underneath it" in draw mode. */
+  .note.locked {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: #55557a;
+    border-color: #6a6a90;
+  }
+
+  .note.locked:hover {
+    background: #55557a;
   }
 
   .resize-handle {

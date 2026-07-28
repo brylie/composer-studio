@@ -11,6 +11,7 @@
   import { createLaneEditor } from './lane-editor.svelte.js';
   import EventTrackLane from './EventTrackLane.svelte';
   import LabelEventEditor from './LabelEventEditor.svelte';
+  import LayerPanel from './LayerPanel.svelte';
   import NoteGrid from './NoteGrid.svelte';
   import OverlayShell from './OverlayShell.svelte';
   import PianoKeys from './PianoKeys.svelte';
@@ -337,6 +338,14 @@
     onclose={() => (ribbonUi.soundDrawerOpen = false)}
   >
     <SynthPanel />
+  </OverlayShell>
+
+  <OverlayShell
+    open={ribbonUi.layerPanelOpen}
+    title="Layers"
+    onclose={() => (ribbonUi.layerPanelOpen = false)}
+  >
+    <LayerPanel />
   </OverlayShell>
 
   <OverlayShell
