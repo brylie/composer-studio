@@ -401,19 +401,25 @@ export function createStore() {
   }
 
   function deleteSelected() {
-    if (selectedNoteIds.size === 0) return;
+    // Gate on selectionContext.notes, not raw selectedNoteIds — a selected
+    // note whose layer is now hidden/locked isn't part of the effective
+    // selection (selection.md#selectioncontext) and must survive Delete.
+    const eligible = selectionContext.notes;
+    if (eligible.length === 0) return;
     recordHistory('Delete selected');
-    notes = notes.filter((n) => !selectedNoteIds.has(n.id));
-    selectedNoteIds.clear();
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain lookup passed straight to the filter below, discarded immediately, never read reactively
+    const idsToDelete = new Set(eligible.map((n) => n.id));
+    notes = notes.filter((n) => !idsToDelete.has(n.id));
+    pruneSelectionToExistingNotes();
     selectionAnchor = null;
   }
 
   // ── Clipboard ─────────────────────────────────────────────────────────────
 
   function copy() {
-    const selected = notes
-      .filter((n) => selectedNoteIds.has(n.id))
-      .sort((a, b) => a.startBeat - b.startBeat);
+    // Same layer-gating as deleteSelected — a locked/hidden-layer note that's
+    // still in selectedNoteIds shouldn't be copyable via Ctrl/Cmd+C.
+    const selected = selectionContext.notes;
     if (selected.length === 0) return;
     const earliest = selected[0].startBeat;
     clipboard = {

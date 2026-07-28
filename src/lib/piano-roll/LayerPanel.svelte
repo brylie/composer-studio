@@ -51,6 +51,14 @@
     if (target.hasPointerCapture(e.pointerId)) target.releasePointerCapture(e.pointerId);
   }
 
+  /** A canceled gesture (OS gesture, lost pointer capture, ...) never reaches pointerup — clear drag state without committing a reorder, or the row is left stuck mid-drag. */
+  function handleDragPointerCancel(e: PointerEvent) {
+    dragId = null;
+    dragOverIndex = null;
+    const target = e.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(e.pointerId)) target.releasePointerCapture(e.pointerId);
+  }
+
   /** Keyboard equivalent of the pointer drag above — Arrow Up/Down moves the row one step, matching the same `store.moveLayer` call the drag commits on pointer-up. */
   function handleDragKeydown(e: KeyboardEvent, id: string, index: number) {
     if (e.key === 'ArrowUp') {
@@ -80,6 +88,7 @@
           }}
           onpointermove={handleDragPointerMove}
           onpointerup={handleDragPointerUp}
+          onpointercancel={handleDragPointerCancel}
           onkeydown={(e) => {
             handleDragKeydown(e, layer.id, index);
           }}
@@ -92,8 +101,7 @@
           class="active-dot"
           class:active={layer.id === store.activeLayerId}
           style="--layer-color: {layer.color};"
-          role="radio"
-          aria-checked={layer.id === store.activeLayerId}
+          aria-pressed={layer.id === store.activeLayerId}
           aria-label="Set {layer.name} as the active layer"
           onclick={() => {
             store.activeLayerId = layer.id;

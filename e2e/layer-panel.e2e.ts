@@ -43,8 +43,8 @@ test.describe('Layer panel', () => {
     await expect(layerRow(page, 0).locator('input[aria-label="Layer name"]')).toHaveValue(
       'Layer 2',
     );
-    await expect(layerRow(page, 0).locator('.active-dot')).toHaveAttribute('aria-checked', 'true');
-    await expect(layerRow(page, 1).locator('.active-dot')).toHaveAttribute('aria-checked', 'false');
+    await expect(layerRow(page, 0).locator('.active-dot')).toHaveAttribute('aria-pressed', 'true');
+    await expect(layerRow(page, 1).locator('.active-dot')).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('renaming a layer updates its row label', async ({ page }) => {
