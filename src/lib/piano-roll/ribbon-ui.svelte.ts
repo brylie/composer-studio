@@ -25,7 +25,15 @@ export function createRibbonUiState(): RibbonUiState {
 
   // $effect bodies never run during SSR, so `window` is safely available here.
   $effect(() => {
-    ribbonOpen = !window.matchMedia('(max-width: 599px)').matches;
+    const query = window.matchMedia('(max-width: 599px)');
+    ribbonOpen = !query.matches;
+    const onChange = (event: MediaQueryListEvent) => {
+      ribbonOpen = !event.matches;
+    };
+    query.addEventListener('change', onChange);
+    return () => {
+      query.removeEventListener('change', onChange);
+    };
   });
 
   return {
