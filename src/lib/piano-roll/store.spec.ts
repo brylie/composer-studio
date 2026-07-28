@@ -115,15 +115,34 @@ describe('CommandHistory', () => {
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
+      arrangerSections: [],
     }));
     expect(history.canUndo).toBe(true);
   });
 
   it('record() clears the redo stack', () => {
-    history.record('A', () => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
-    history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
+    history.record('A', () => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+      arrangerSections: [],
+    }));
+    history.undo(() => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+      arrangerSections: [],
+    }));
     expect(history.canRedo).toBe(true);
-    history.record('B', () => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
+    history.record('B', () => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+      arrangerSections: [],
+    }));
     expect(history.canRedo).toBe(false);
   });
 
@@ -133,6 +152,7 @@ describe('CommandHistory', () => {
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
+      arrangerSections: [],
     };
     history.record('Transpose', () => snap);
     const entry = history.undo(() => ({
@@ -140,6 +160,7 @@ describe('CommandHistory', () => {
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
+      arrangerSections: [],
     }));
     expect(entry?.label).toBe('Transpose');
     expect(entry?.notes).toEqual(snap.notes);
@@ -153,13 +174,21 @@ describe('CommandHistory', () => {
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
+      arrangerSections: [],
     }));
-    history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
+    history.undo(() => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+      arrangerSections: [],
+    }));
     const entry = history.redo(() => ({
       notes: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
+      arrangerSections: [],
     }));
     expect(entry?.label).toBe('Move');
     expect(history.canRedo).toBe(false);
@@ -168,13 +197,25 @@ describe('CommandHistory', () => {
 
   it('undo() returns undefined when stack is empty', () => {
     expect(
-      history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] })),
+      history.undo(() => ({
+        notes: [],
+        scaleEvents: [],
+        chordEvents: [],
+        labelEvents: [],
+        arrangerSections: [],
+      })),
     ).toBeUndefined();
   });
 
   it('redo() returns undefined when stack is empty', () => {
     expect(
-      history.redo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] })),
+      history.redo(() => ({
+        notes: [],
+        scaleEvents: [],
+        chordEvents: [],
+        labelEvents: [],
+        arrangerSections: [],
+      })),
     ).toBeUndefined();
   });
 
@@ -185,6 +226,7 @@ describe('CommandHistory', () => {
         scaleEvents: [],
         chordEvents: [],
         labelEvents: [],
+        arrangerSections: [],
       }));
     }
     // pop 50 times — should all succeed
@@ -194,12 +236,19 @@ describe('CommandHistory', () => {
         scaleEvents: [],
         chordEvents: [],
         labelEvents: [],
+        arrangerSections: [],
       }));
       expect(entry).toBeDefined();
     }
     // 51st pop must return undefined (stack was trimmed to 50)
     expect(
-      history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] })),
+      history.undo(() => ({
+        notes: [],
+        scaleEvents: [],
+        chordEvents: [],
+        labelEvents: [],
+        arrangerSections: [],
+      })),
     ).toBeUndefined();
   });
 
@@ -209,9 +258,16 @@ describe('CommandHistory', () => {
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
+      arrangerSections: [],
     }));
     expect(history.undoLabel).toBe('First');
-    history.undo(() => ({ notes: [], scaleEvents: [], chordEvents: [], labelEvents: [] }));
+    history.undo(() => ({
+      notes: [],
+      scaleEvents: [],
+      chordEvents: [],
+      labelEvents: [],
+      arrangerSections: [],
+    }));
     expect(history.redoLabel).toBe('First');
   });
 });
@@ -914,6 +970,99 @@ describe('createStore — label track', () => {
     store.moveLabelEvent('l1', 8);
     expect(store.labelTrack[0]).toEqual({ id: 'l1', beat: 8, text: 'Solo starts here' });
     expect(store.history.undoLabel).toBe('Move label marker');
+  });
+});
+
+// ── createStore — arranger track (tracks.md#arranger-track-placeholder) ──────
+
+describe('createStore — arranger track', () => {
+  it('starts empty', () => {
+    const store = createStore();
+    expect(store.arrangerTrack).toEqual([]);
+  });
+
+  it('addArrangerSection adds a default-sized section and records history', () => {
+    const store = createStore();
+    store.addArrangerSection(4);
+    expect(store.arrangerTrack).toHaveLength(1);
+    expect(store.arrangerTrack[0]).toMatchObject({
+      label: 'New section',
+      startBeat: 4,
+      endBeat: 8,
+    });
+    expect(store.history.undoLabel).toBe('Add section');
+  });
+
+  it('addArrangerSection is a no-op when tapped inside an existing section', () => {
+    const store = createStore();
+    store.addArrangerSection(0);
+    const before = store.arrangerTrack;
+    store.addArrangerSection(2);
+    expect(store.arrangerTrack).toBe(before);
+    expect(store.arrangerTrack).toHaveLength(1);
+  });
+
+  it('moveArrangerSection relocates a section, keeping its duration, and records history', () => {
+    const store = createStore();
+    store.addArrangerSection(0);
+    const id = store.arrangerTrack[0].id;
+    store.moveArrangerSection(id, 10);
+    expect(store.arrangerTrack[0]).toMatchObject({ startBeat: 10, endBeat: 14 });
+    expect(store.history.undoLabel).toBe('Move section');
+  });
+
+  it('moveArrangerSection clamps against a neighboring section instead of overlapping it', () => {
+    const store = createStore();
+    store.addArrangerSection(0); // [0, 4)
+    store.addArrangerSection(10); // [10, 14)
+    const [first, second] = store.arrangerTrack;
+    store.moveArrangerSection(second.id, 1); // drag toward `first`
+    const moved = store.arrangerTrack.find((s) => s.id === second.id);
+    expect(moved?.startBeat).toBe(first.endBeat);
+  });
+
+  it('resizeArrangerSectionStart/End adjust edges and record history', () => {
+    const store = createStore();
+    store.addArrangerSection(0); // [0, 4)
+    const id = store.arrangerTrack[0].id;
+    store.resizeArrangerSectionStart(id, 1);
+    expect(store.arrangerTrack[0]).toMatchObject({ startBeat: 1, endBeat: 4 });
+    expect(store.history.undoLabel).toBe('Resize section');
+    store.resizeArrangerSectionEnd(id, 8);
+    expect(store.arrangerTrack[0]).toMatchObject({ startBeat: 1, endBeat: 8 });
+    expect(store.history.undoLabel).toBe('Resize section');
+  });
+
+  it('updateArrangerSection renames/recolors a section without moving it', () => {
+    const store = createStore();
+    store.addArrangerSection(0);
+    const id = store.arrangerTrack[0].id;
+    store.updateArrangerSection(id, { label: 'Chorus', color: '#123456' });
+    expect(store.arrangerTrack[0]).toMatchObject({
+      label: 'Chorus',
+      color: '#123456',
+      startBeat: 0,
+      endBeat: 4,
+    });
+    expect(store.history.undoLabel).toBe('Rename section');
+  });
+
+  it('removeArrangerSection removes the section and records history', () => {
+    const store = createStore();
+    store.addArrangerSection(0);
+    const id = store.arrangerTrack[0].id;
+    store.removeArrangerSection(id);
+    expect(store.arrangerTrack).toEqual([]);
+    expect(store.history.undoLabel).toBe('Remove section');
+  });
+
+  it('undo restores a removed section', () => {
+    const store = createStore();
+    store.addArrangerSection(0);
+    const id = store.arrangerTrack[0].id;
+    store.removeArrangerSection(id);
+    store.undo();
+    expect(store.arrangerTrack.some((s) => s.id === id)).toBe(true);
   });
 });
 

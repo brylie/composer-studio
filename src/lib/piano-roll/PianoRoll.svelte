@@ -1,5 +1,9 @@
 <script lang="ts">
   import type { Action } from 'svelte/action';
+  import type { ArrangerSection } from './arranger.js';
+  import { createArrangerLaneEditor } from './arranger-lane-editor.svelte.js';
+  import ArrangerLane from './ArrangerLane.svelte';
+  import ArrangerSectionEditor from './ArrangerSectionEditor.svelte';
   import ChordEventEditor from './ChordEventEditor.svelte';
   import { getEditorState } from './context.svelte.js';
   const { store, ribbonUi } = getEditorState();
@@ -23,14 +27,26 @@
   const rulerWidth = $derived(store.totalBeats * store.pixelsPerBeat);
 
   // ── Event track lanes (tracks.md#shared-lane-component) ─────────────────
-  // Stacked scale → chord → labels, per tracks.md's fixed lane order. Each
-  // lane owns a createLaneEditor controller (lane-editor.svelte.ts) rather
-  // than a bespoke open/save/delete/move quartet per track type — the three
-  // lanes below would otherwise be near-identical copies of the same wiring.
+  // Stacked arranger → scale → chord → labels, per tracks.md's fixed lane
+  // order. The scale/chord/labels lanes share createLaneEditor
+  // (lane-editor.svelte.ts); the arranger lane's sections span a range and
+  // support move/resize rather than a single beat, so it gets its own
+  // ArrangerLane component and createArrangerLaneEditor controller
+  // (arranger-lane-editor.svelte.ts) instead of reusing EventTrackLane.
   const RULER_HEIGHT = 24;
+  const ARRANGER_LANE_HEIGHT = 28;
   const SCALE_LANE_HEIGHT = 26;
   const CHORD_LANE_HEIGHT = 26;
   const LABELS_LANE_HEIGHT = 26;
+
+  const arrangerLane = createArrangerLaneEditor(
+    (id, updates) => {
+      store.updateArrangerSection(id, updates);
+    },
+    (id) => {
+      store.removeArrangerSection(id);
+    },
+  );
 
   const scaleLane = createLaneEditor<ScaleEvent>(
     () => store.scaleTrack,
@@ -168,7 +184,7 @@
       <div class="scroll-area" use:scrollAreaAction={autoScrollX}>
         <div
           class="scroll-content"
-          style="width: max-content; min-height: 100%; grid-template-rows: {RULER_HEIGHT}px {SCALE_LANE_HEIGHT}px {CHORD_LANE_HEIGHT}px {LABELS_LANE_HEIGHT}px auto;"
+          style="width: max-content; min-height: 100%; grid-template-rows: {RULER_HEIGHT}px {ARRANGER_LANE_HEIGHT}px {SCALE_LANE_HEIGHT}px {CHORD_LANE_HEIGHT}px {LABELS_LANE_HEIGHT}px auto;"
         >
           <!-- Top-left corner (aligned with ruler) -->
           <div class="corner-spacer" style="position: sticky; left: 0; z-index: 30;"></div>
@@ -184,6 +200,31 @@
             {/each}
           </div>
 
+          <!-- Arranger lane (tracks.md#arranger-track-placeholder) — topmost
+               per the fixed stacking order (arranger, then scale, then
+               chord, then labels). v1 is annotation-only: sections carry no
+               notes/other-track content when added/moved/resized. -->
+          <ArrangerLane
+            sections={store.arrangerTrack}
+            pixelsPerBeat={store.pixelsPerBeat}
+            totalBeats={store.totalBeats}
+            snapBeats={store.snapBeats}
+            row={2}
+            stickyTop={RULER_HEIGHT}
+            height={ARRANGER_LANE_HEIGHT}
+            onAddAt={store.addArrangerSection}
+            onSelect={arrangerLane.openFor}
+            onMove={(section: ArrangerSection, beat: number) => {
+              store.moveArrangerSection(section.id, beat);
+            }}
+            onResizeStart={(section: ArrangerSection, beat: number) => {
+              store.resizeArrangerSectionStart(section.id, beat);
+            }}
+            onResizeEnd={(section: ArrangerSection, beat: number) => {
+              store.resizeArrangerSectionEnd(section.id, beat);
+            }}
+          />
+
           <!-- Scale lane (tracks.md) — synced scroll/zoom with the grid below via
                the same shared timeline grid, sticky just under the ruler. -->
           <EventTrackLane
@@ -192,8 +233,8 @@
             pixelsPerBeat={store.pixelsPerBeat}
             totalBeats={store.totalBeats}
             snapBeats={store.snapBeats}
-            row={2}
-            stickyTop={RULER_HEIGHT}
+            row={3}
+            stickyTop={RULER_HEIGHT + ARRANGER_LANE_HEIGHT}
             height={SCALE_LANE_HEIGHT}
             onAddAt={scaleLane.openAt}
             onSelect={scaleLane.openFor}
@@ -206,15 +247,15 @@
 
           <!-- Chord lane (tracks.md#chord-track-placeholder) — same lane
                component, one row below the scale lane per the fixed stacking
-               order (scale, then chord, then labels). -->
+               order (arranger, scale, then chord, then labels). -->
           <EventTrackLane
             label="Chord"
             events={store.chordTrack}
             pixelsPerBeat={store.pixelsPerBeat}
             totalBeats={store.totalBeats}
             snapBeats={store.snapBeats}
-            row={3}
-            stickyTop={RULER_HEIGHT + SCALE_LANE_HEIGHT}
+            row={4}
+            stickyTop={RULER_HEIGHT + ARRANGER_LANE_HEIGHT + SCALE_LANE_HEIGHT}
             height={CHORD_LANE_HEIGHT}
             onAddAt={chordLane.openAt}
             onSelect={chordLane.openFor}
@@ -233,8 +274,8 @@
             pixelsPerBeat={store.pixelsPerBeat}
             totalBeats={store.totalBeats}
             snapBeats={store.snapBeats}
-            row={4}
-            stickyTop={RULER_HEIGHT + SCALE_LANE_HEIGHT + CHORD_LANE_HEIGHT}
+            row={5}
+            stickyTop={RULER_HEIGHT + ARRANGER_LANE_HEIGHT + SCALE_LANE_HEIGHT + CHORD_LANE_HEIGHT}
             height={LABELS_LANE_HEIGHT}
             onAddAt={labelLane.openAt}
             onSelect={labelLane.openFor}
@@ -296,6 +337,20 @@
     onclose={() => (ribbonUi.soundDrawerOpen = false)}
   >
     <SynthPanel />
+  </OverlayShell>
+
+  <OverlayShell
+    open={arrangerLane.target !== null}
+    title="Arranger section"
+    onclose={arrangerLane.close}
+  >
+    {#if arrangerLane.target}
+      <ArrangerSectionEditor
+        section={arrangerLane.target}
+        onSave={arrangerLane.save}
+        onDelete={arrangerLane.delete}
+      />
+    {/if}
   </OverlayShell>
 
   <OverlayShell open={scaleLane.target !== null} title="Scale marker" onclose={scaleLane.close}>
@@ -384,9 +439,10 @@
     display: grid;
     /* col 1: piano key width (sticky), col 2: rest */
     grid-template-columns: 64px 1fr;
-    /* row 1: ruler, row 2: scale lane, row 3: chord lane, row 4: labels lane
-       (tracks.md's fixed stacking order), row 5: piano keys + note grid —
-       heights set inline from RULER_HEIGHT/SCALE_LANE_HEIGHT/CHORD_LANE_HEIGHT/
+    /* row 1: ruler, row 2: arranger lane, row 3: scale lane, row 4: chord
+       lane, row 5: labels lane (tracks.md's fixed stacking order), row 6:
+       piano keys + note grid — heights set inline from RULER_HEIGHT/
+       ARRANGER_LANE_HEIGHT/SCALE_LANE_HEIGHT/CHORD_LANE_HEIGHT/
        LABELS_LANE_HEIGHT to keep this in sync. */
   }
 
@@ -425,7 +481,7 @@
   /* ── Grid row: piano keys + note grid ── */
   .grid-row {
     grid-column: 1 / -1;
-    grid-row: 5;
+    grid-row: 6;
     display: flex;
     align-items: flex-start;
   }

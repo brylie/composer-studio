@@ -1,3 +1,4 @@
+import type { ArrangerSection } from './arranger.js';
 import type { ChordEvent, LabelEvent, ScaleEvent } from './timeline.js';
 
 export interface Note {
@@ -156,5 +157,5 @@ export interface DocumentSnapshot {
   scaleEvents: ScaleEvent[];
   chordEvents: ChordEvent[];
   labelEvents: LabelEvent[];
-  // arrangerSections added once that track lands (Phase 9)
+  arrangerSections: ArrangerSection[];
 }
