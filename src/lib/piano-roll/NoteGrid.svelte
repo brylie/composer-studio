@@ -4,6 +4,7 @@
   import { isBlackKey, MIN_MIDI, MAX_MIDI, NOTE_COUNT } from './types.js';
   import type { Note } from './types.js';
   import { auditionNote } from './audio.js';
+  import { scaleSegments } from './tracks.js';
 
   /** Shift or Ctrl/Cmd — the modifiers that mean "add to selection" rather than replace it. */
   function isAdditive(e: PointerEvent): boolean {
@@ -22,6 +23,30 @@
   function rowForMidi(midi: number): number {
     return MAX_MIDI - midi;
   }
+
+  // Per-segment scale-degree highlighting (tracks.md#context-aware-highlighting).
+  // Computed across the full timeline, not a scrolled viewport — the grid
+  // isn't virtualized today, so there's no perf reason to restrict the range;
+  // eventSegments' carry-in logic still applies correctly at range start 0.
+  // One rect per (in-scale row, segment) pair — rows in-scale in one segment
+  // and out-of-scale in the next must visibly change at the boundary, not
+  // blend, which rules out a single full-row style.
+  const scaleHighlightRects = $derived(
+    scaleSegments(store.scaleTrack, 0, store.totalBeats).flatMap((segment) =>
+      noteRange
+        .filter((midi) => segment.scaleDegrees.has(midi % 12))
+        .map((midi) => ({
+          key: `${segment.event.id}:${String(segment.startBeat)}:${String(midi)}`,
+          left: segment.startBeat * store.pixelsPerBeat,
+          top: rowForMidi(midi) * store.rowHeight,
+          width: (segment.endBeat - segment.startBeat) * store.pixelsPerBeat,
+        })),
+    ),
+  );
+
+  // Bar-line positions honoring time-signature changes (timeline.md), replacing
+  // the previous hardcoded "every 4 beats" CSS repeating-gradient.
+  const barLineLefts = $derived(store.barBeats.map((beat) => beat * store.pixelsPerBeat));
 
   function midiForRow(row: number): number {
     return Math.max(MIN_MIDI, Math.min(MAX_MIDI, MAX_MIDI - row));
@@ -304,7 +329,6 @@
     width: {totalWidth}px;
     height: {totalHeight}px;
     --beat-px: {store.pixelsPerBeat}px;
-    --bar-px: {store.pixelsPerBeat * 4}px;
     --eighth-px: {store.pixelsPerBeat * 0.5}px;
     --sixteenth-px: {store.pixelsPerBeat * 0.25}px;
     --row-h: {store.rowHeight}px;
@@ -324,8 +348,21 @@
     ></div>
   {/each}
 
-  <!-- Bar & beat lines via CSS background on overlay -->
+  <!-- Scale-degree highlighting (tracks.md) — one band per (in-scale row, segment) -->
+  {#each scaleHighlightRects as rect (rect.key)}
+    <div
+      class="scale-highlight"
+      style="left: {rect.left}px; top: {rect.top}px; width: {rect.width}px; height: {store.rowHeight}px;"
+    ></div>
+  {/each}
+
+  <!-- Beat/8th/16th subdivision lines via CSS background on overlay -->
   <div class="grid-lines" style="width: {totalWidth}px; height: {totalHeight}px;"></div>
+
+  <!-- Bar lines, positioned per the time-signature track (timeline.md) -->
+  {#each barLineLefts as left (left)}
+    <div class="bar-line" style="left: {left}px; height: {totalHeight}px;"></div>
+  {/each}
 
   <!-- Notes -->
   {#each store.notes as note (note.id)}
@@ -381,28 +418,39 @@
     border-top: 1px solid #2e2e50;
   }
 
-  /* ── Grid lines via CSS repeating-gradient ── */
+  /* ── Scale-degree highlighting (tracks.md) ── */
+  .scale-highlight {
+    position: absolute;
+    box-sizing: border-box;
+    border-top: 1px solid var(--color-scale-degree, #38bdf8);
+    border-bottom: 1px solid var(--color-scale-degree, #38bdf8);
+    background: color-mix(in srgb, var(--color-scale-degree, #38bdf8) 8%, transparent);
+    pointer-events: none;
+  }
+
+  /* ── Bar lines — positioned per the time-signature track, not a fixed interval ── */
+  .bar-line {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    background: #3a3a62;
+    pointer-events: none;
+  }
+
+  /* ── Beat/8th/16th subdivision lines via CSS repeating-gradient ── */
   .grid-lines {
     position: absolute;
     inset: 0;
     pointer-events: none;
     background-image:
-      /* Bar lines (every 4 beats) — brightest */
-      repeating-linear-gradient(
-        to right,
-        #3a3a62 0,
-        #3a3a62 1px,
-        transparent 1px,
-        transparent var(--bar-px)
-      ),
       /* Beat lines (every 1 beat) — medium */
       repeating-linear-gradient(
-          to right,
-          #252545 0,
-          #252545 1px,
-          transparent 1px,
-          transparent var(--beat-px)
-        ),
+        to right,
+        #252545 0,
+        #252545 1px,
+        transparent 1px,
+        transparent var(--beat-px)
+      ),
       /* 8th-note lines (every ½ beat) — subtle */
       repeating-linear-gradient(
           to right,

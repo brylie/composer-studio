@@ -27,6 +27,31 @@ export function pitchClassesForScale(root: string, mode: string): Set<number> {
   return new Set(scale.notes.map(chromaOf));
 }
 
+const PITCH_CLASS_NAMES = [
+  'C',
+  'C#',
+  'D',
+  'D#',
+  'E',
+  'F',
+  'F#',
+  'G',
+  'G#',
+  'A',
+  'A#',
+  'B',
+] as const;
+
+/**
+ * Same as pitchClassesForScale, but takes a numeric root pitch class (0-11,
+ * matching ScaleEvent.root in tracks.md) instead of a note-name string —
+ * the shape event tracks actually store.
+ */
+export function pitchClassesForScaleEvent(root: number, mode: string): Set<number> {
+  const rootName = PITCH_CLASS_NAMES[((root % 12) + 12) % 12];
+  return pitchClassesForScale(rootName, mode);
+}
+
 /** Pitch classes (0-11) belonging to a named chord, e.g. pitchClassesForChord('C', 'maj7'). */
 export function pitchClassesForChord(root: string, quality: string): Set<number> {
   const chord = getChord(`${root}${quality}`);

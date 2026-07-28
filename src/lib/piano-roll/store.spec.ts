@@ -110,24 +110,25 @@ describe('CommandHistory', () => {
   });
 
   it('canUndo becomes true after record()', () => {
-    history.record('Test', () => ({ notes: [] }));
+    history.record('Test', () => ({ notes: [], scaleEvents: [] }));
     expect(history.canUndo).toBe(true);
   });
 
   it('record() clears the redo stack', () => {
-    history.record('A', () => ({ notes: [] }));
-    history.undo(() => ({ notes: [] }));
+    history.record('A', () => ({ notes: [], scaleEvents: [] }));
+    history.undo(() => ({ notes: [], scaleEvents: [] }));
     expect(history.canRedo).toBe(true);
-    history.record('B', () => ({ notes: [] }));
+    history.record('B', () => ({ notes: [], scaleEvents: [] }));
     expect(history.canRedo).toBe(false);
   });
 
   it('undo() returns the recorded snapshot and sets canRedo=true', () => {
     const snap = {
       notes: [{ id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 }],
+      scaleEvents: [],
     };
     history.record('Transpose', () => snap);
-    const entry = history.undo(() => ({ notes: [] }));
+    const entry = history.undo(() => ({ notes: [], scaleEvents: [] }));
     expect(entry?.label).toBe('Transpose');
     expect(entry?.notes).toEqual(snap.notes);
     expect(history.canUndo).toBe(false);
@@ -135,39 +136,39 @@ describe('CommandHistory', () => {
   });
 
   it('redo() returns the snapshot and restores canUndo', () => {
-    history.record('Move', () => ({ notes: [] }));
-    history.undo(() => ({ notes: [] }));
-    const entry = history.redo(() => ({ notes: [] }));
+    history.record('Move', () => ({ notes: [], scaleEvents: [] }));
+    history.undo(() => ({ notes: [], scaleEvents: [] }));
+    const entry = history.redo(() => ({ notes: [], scaleEvents: [] }));
     expect(entry?.label).toBe('Move');
     expect(history.canRedo).toBe(false);
     expect(history.canUndo).toBe(true);
   });
 
   it('undo() returns undefined when stack is empty', () => {
-    expect(history.undo(() => ({ notes: [] }))).toBeUndefined();
+    expect(history.undo(() => ({ notes: [], scaleEvents: [] }))).toBeUndefined();
   });
 
   it('redo() returns undefined when stack is empty', () => {
-    expect(history.redo(() => ({ notes: [] }))).toBeUndefined();
+    expect(history.redo(() => ({ notes: [], scaleEvents: [] }))).toBeUndefined();
   });
 
   it('trims undo stack to maxDepth (50)', () => {
     for (let i = 0; i < 55; i++) {
-      history.record(`Step ${String(i)}`, () => ({ notes: [] }));
+      history.record(`Step ${String(i)}`, () => ({ notes: [], scaleEvents: [] }));
     }
     // pop 50 times — should all succeed
     for (let i = 0; i < 50; i++) {
-      const entry = history.undo(() => ({ notes: [] }));
+      const entry = history.undo(() => ({ notes: [], scaleEvents: [] }));
       expect(entry).toBeDefined();
     }
     // 51st pop must return undefined (stack was trimmed to 50)
-    expect(history.undo(() => ({ notes: [] }))).toBeUndefined();
+    expect(history.undo(() => ({ notes: [], scaleEvents: [] }))).toBeUndefined();
   });
 
   it('exposes undoLabel and redoLabel', () => {
-    history.record('First', () => ({ notes: [] }));
+    history.record('First', () => ({ notes: [], scaleEvents: [] }));
     expect(history.undoLabel).toBe('First');
-    history.undo(() => ({ notes: [] }));
+    history.undo(() => ({ notes: [], scaleEvents: [] }));
     expect(history.redoLabel).toBe('First');
   });
 });
@@ -560,6 +561,190 @@ describe('createStore — clipboard', () => {
     expect(dup2).toBeDefined();
     expect(store.selectedNoteIds.has(dup1?.id ?? '')).toBe(true);
     expect(store.selectedNoteIds.has(dup2?.id ?? '')).toBe(true);
+  });
+});
+
+// ── createStore — timeline event tracks (timeline.md, tracks.md) ────────────
+
+describe('createStore — tempo track', () => {
+  it('defaults to 122 BPM, backed by a single tempoTrack event at beat 0', () => {
+    const store = createStore();
+    expect(store.tempo).toBe(122);
+    expect(store.tempoTrack).toHaveLength(1);
+    expect(store.tempoTrack[0]).toMatchObject({ beat: 0, bpm: 122 });
+  });
+
+  it('setting tempo updates the underlying tempoTrack event in place', () => {
+    const store = createStore();
+    const originalId = store.tempoTrack[0].id;
+    store.tempo = 140;
+    expect(store.tempo).toBe(140);
+    expect(store.tempoTrack).toHaveLength(1);
+    expect(store.tempoTrack[0]).toEqual({ id: originalId, beat: 0, bpm: 140 });
+  });
+});
+
+describe('createStore — time signature track', () => {
+  it('defaults to a single 4/4 event at beat 0', () => {
+    const store = createStore();
+    expect(store.timeSignatureTrack).toHaveLength(1);
+    expect(store.timeSignatureTrack[0]).toMatchObject({ beat: 0, numerator: 4, denominator: 4 });
+  });
+
+  it('barBeats produces bar lines every 4 beats by default', () => {
+    const store = createStore();
+    expect(store.totalBeats).toBe(64);
+    expect(store.barBeats.slice(0, 4)).toEqual([0, 4, 8, 12]);
+  });
+});
+
+describe('createStore — scale track', () => {
+  it('defaults to a single C major event at beat 0', () => {
+    const store = createStore();
+    expect(store.scaleTrack).toHaveLength(1);
+    expect(store.scaleTrack[0]).toMatchObject({ beat: 0, root: 0, mode: 'major' });
+  });
+
+  it('upsertScaleEvent adds a new marker and records history', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    expect(store.scaleTrack).toHaveLength(2);
+    expect(store.scaleTrack[1]).toEqual({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    expect(store.history.canUndo).toBe(true);
+  });
+
+  it('upsertScaleEvent replaces an existing marker at the same beat instead of stacking', () => {
+    const store = createStore();
+    const defaultId = store.scaleTrack[0].id;
+    store.upsertScaleEvent({ id: 'replacement', beat: 0, root: 7, mode: 'mixolydian' });
+    expect(store.scaleTrack).toHaveLength(1);
+    expect(store.scaleTrack[0]).toEqual({
+      id: 'replacement',
+      beat: 0,
+      root: 7,
+      mode: 'mixolydian',
+    });
+    expect(store.scaleTrack[0].id).not.toBe(defaultId);
+  });
+
+  it('removeScaleEvent removes the marker and records history', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.removeScaleEvent('m1');
+    expect(store.scaleTrack.some((e) => e.id === 'm1')).toBe(false);
+  });
+
+  it('undo restores a removed scale marker', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.removeScaleEvent('m1');
+    expect(store.scaleTrack.some((e) => e.id === 'm1')).toBe(false);
+    store.undo();
+    expect(store.scaleTrack.some((e) => e.id === 'm1')).toBe(true);
+  });
+
+  it('moveScaleEvent relocates a marker to a new beat, keeping its id/root/mode', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.moveScaleEvent('m1', 12);
+    expect(store.scaleTrack.find((e) => e.id === 'm1')).toEqual({
+      id: 'm1',
+      beat: 12,
+      root: 9,
+      mode: 'aeolian',
+    });
+    expect(store.scaleTrack).toHaveLength(2);
+  });
+
+  it('moveScaleEvent replaces whatever marker already occupies the target beat', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.upsertScaleEvent({ id: 'm2', beat: 16, root: 2, mode: 'dorian' });
+    store.moveScaleEvent('m1', 16);
+    expect(store.scaleTrack).toHaveLength(2); // default C-major event + the moved m1
+    expect(store.scaleTrack.some((e) => e.id === 'm2')).toBe(false);
+    expect(store.scaleTrack.find((e) => e.beat === 16)).toEqual({
+      id: 'm1',
+      beat: 16,
+      root: 9,
+      mode: 'aeolian',
+    });
+  });
+
+  it('moveScaleEvent records history so undo restores the original beat', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.moveScaleEvent('m1', 12);
+    expect(store.history.undoLabel).toBe('Move scale marker');
+    store.undo();
+    expect(store.scaleTrack.find((e) => e.id === 'm1')?.beat).toBe(8);
+  });
+
+  it('moveScaleEvent is a no-op (no history entry) when the beat is unchanged', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    const undoLabelBefore = store.history.undoLabel;
+    store.moveScaleEvent('m1', 8);
+    expect(store.history.undoLabel).toBe(undoLabelBefore);
+  });
+
+  it('moveScaleEvent is a no-op for an unknown id', () => {
+    const store = createStore();
+    store.moveScaleEvent('does-not-exist', 8);
+    expect(store.scaleTrack).toHaveLength(1);
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('moveScaleEvent is a no-op (no history entry) when a negative beat clamps back to the current beat', () => {
+    const store = createStore();
+    // Default marker is already at beat 0 — moving to a negative beat clamps
+    // to 0, which must be recognized as unchanged, not recorded as a move.
+    store.moveScaleEvent(store.scaleTrack[0].id, -5);
+    expect(store.scaleTrack[0].beat).toBe(0);
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('moveScaleEvent clamps a negative beat to 0 when it does change the position', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.moveScaleEvent('m1', -5);
+    expect(store.scaleTrack.find((e) => e.id === 'm1')?.beat).toBe(0);
+    expect(store.history.undoLabel).toBe('Move scale marker');
+  });
+
+  it('activeScaleAt resolves the scale in effect at a given beat', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    expect(store.activeScaleAt(0)?.mode).toBe('major');
+    expect(store.activeScaleAt(7.9)?.mode).toBe('major');
+    expect(store.activeScaleAt(8)?.mode).toBe('aeolian');
+  });
+
+  it('selectionContext.activeScales reflects the scale(s) under the current selection', () => {
+    const store = createStore();
+    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 2, velocity: 100 });
+    store.selectNote('a', false);
+    const ctx = store.selectionContext;
+    expect(ctx.activeScales).toHaveLength(1);
+    expect(ctx.activeScales[0].scale.mode).toBe('major');
+    expect(ctx.activeScales[0].start).toBe(0);
+    expect(ctx.activeScales[0].end).toBe(2);
+  });
+
+  it('selectionContext.activeScales splits a selection spanning a scale change into multiple segments', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 4, root: 9, mode: 'aeolian' });
+    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 8, velocity: 100 });
+    store.selectNote('a', false);
+    const ctx = store.selectionContext;
+    expect(ctx.activeScales).toHaveLength(2);
+    expect(ctx.activeScales[0]).toMatchObject({ start: 0, end: 4 });
+    expect(ctx.activeScales[1]).toMatchObject({ start: 4, end: 8 });
+  });
+
+  it('selectionContext.activeScales is empty when nothing is selected', () => {
+    const store = createStore();
+    expect(store.selectionContext.activeScales).toEqual([]);
   });
 });
 

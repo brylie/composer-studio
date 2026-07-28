@@ -3,19 +3,54 @@
   import { getEditorState } from './context.svelte.js';
   const { store, ribbonUi } = getEditorState();
   import CommandRibbon from './CommandRibbon.svelte';
+  import EventTrackLane from './EventTrackLane.svelte';
   import NoteGrid from './NoteGrid.svelte';
   import OverlayShell from './OverlayShell.svelte';
   import PianoKeys from './PianoKeys.svelte';
+  import ScaleEventEditor from './ScaleEventEditor.svelte';
   import SynthPanel from './SynthPanel.svelte';
+  import type { ScaleEvent } from './timeline.js';
   import Toolbar from './Toolbar.svelte';
   import TopBar from './TopBar.svelte';
-  import { MAX_MIDI } from './types.js';
+  import { MAX_MIDI, NOTE_NAMES } from './types.js';
 
   let velDragNoteId: string | null = $state(null);
   let velScrollLeft = $state(0);
 
-  const barCount = $derived(Math.ceil(store.totalBeats / 4));
   const rulerWidth = $derived(store.totalBeats * store.pixelsPerBeat);
+
+  // ── Scale lane (tracks.md) ──────────────────────────────────────────────
+  const RULER_HEIGHT = 24;
+  const SCALE_LANE_HEIGHT = 26;
+
+  interface ScaleEditorTarget {
+    beat: number;
+    existing: ScaleEvent | null;
+  }
+  let scaleEditorTarget: ScaleEditorTarget | null = $state(null);
+
+  function openScaleEditorAt(beat: number) {
+    const existing = store.scaleTrack.find((e) => e.beat === beat) ?? null;
+    scaleEditorTarget = { beat, existing };
+  }
+
+  function openScaleEditorFor(event: ScaleEvent) {
+    scaleEditorTarget = { beat: event.beat, existing: event };
+  }
+
+  function saveScaleEvent(event: ScaleEvent) {
+    store.upsertScaleEvent(event);
+    scaleEditorTarget = null;
+  }
+
+  function deleteScaleEvent(id: string) {
+    store.removeScaleEvent(id);
+    scaleEditorTarget = null;
+  }
+
+  function moveScaleEvent(event: ScaleEvent, beat: number) {
+    store.moveScaleEvent(event.id, beat);
+  }
 
   // Derived playhead X position — null when not playing (disables auto-scroll)
   const autoScrollX = $derived(store.isPlaying ? store.currentBeat * store.pixelsPerBeat : null);
@@ -114,20 +149,45 @@
     <div class="grid-area">
       <!-- Single shared scroll container for piano keys + grid -->
       <div class="scroll-area" use:scrollAreaAction={autoScrollX}>
-        <div class="scroll-content" style="width: max-content; min-height: 100%;">
+        <div
+          class="scroll-content"
+          style="width: max-content; min-height: 100%; grid-template-rows: {RULER_HEIGHT}px {SCALE_LANE_HEIGHT}px auto;"
+        >
           <!-- Top-left corner (aligned with ruler) -->
           <div class="corner-spacer" style="position: sticky; left: 0; z-index: 30;"></div>
 
-          <!-- Measure ruler (sticky top, scrolls horizontally) -->
+          <!-- Measure ruler (sticky top, scrolls horizontally) — bar positions
+               follow the time-signature track (timeline.md), not a hardcoded
+               4-beat assumption. -->
           <div class="ruler" style="width: {rulerWidth}px; position: sticky; top: 0; z-index: 20;">
-            {#each Array.from({ length: barCount }, (_, i) => i) as bar (bar)}
-              <div class="bar-marker" style="left: {bar * 4 * store.pixelsPerBeat}px;">
-                {bar + 1}
+            {#each store.barBeats as barBeat, i (barBeat)}
+              <div class="bar-marker" style="left: {barBeat * store.pixelsPerBeat}px;">
+                {i + 1}
               </div>
             {/each}
           </div>
 
-          <!-- Second row: piano keys + note grid -->
+          <!-- Scale lane (tracks.md) — synced scroll/zoom with the grid below via
+               the same shared timeline grid, sticky just under the ruler. -->
+          <EventTrackLane
+            label="Scale"
+            events={store.scaleTrack}
+            pixelsPerBeat={store.pixelsPerBeat}
+            totalBeats={store.totalBeats}
+            snapBeats={store.snapBeats}
+            row={2}
+            stickyTop={RULER_HEIGHT}
+            height={SCALE_LANE_HEIGHT}
+            onAddAt={openScaleEditorAt}
+            onSelect={openScaleEditorFor}
+            onMove={moveScaleEvent}
+          >
+            {#snippet marker(event: ScaleEvent)}
+              {NOTE_NAMES[event.root]} {event.mode}
+            {/snippet}
+          </EventTrackLane>
+
+          <!-- Third row: piano keys + note grid -->
           <div class="grid-row">
             <!-- Piano keys: sticky left -->
             <PianoKeys />
@@ -178,6 +238,21 @@
     onclose={() => (ribbonUi.soundDrawerOpen = false)}
   >
     <SynthPanel />
+  </OverlayShell>
+
+  <OverlayShell
+    open={scaleEditorTarget !== null}
+    title="Scale marker"
+    onclose={() => (scaleEditorTarget = null)}
+  >
+    {#if scaleEditorTarget}
+      <ScaleEventEditor
+        beat={scaleEditorTarget.beat}
+        existing={scaleEditorTarget.existing}
+        onSave={saveScaleEvent}
+        onDelete={deleteScaleEvent}
+      />
+    {/if}
   </OverlayShell>
 </div>
 
@@ -233,7 +308,8 @@
     display: grid;
     /* col 1: piano key width (sticky), col 2: rest */
     grid-template-columns: 64px 1fr;
-    grid-template-rows: 24px auto;
+    /* row 1: ruler, row 2: scale lane (tracks.md), row 3: piano keys + note grid —
+       heights set inline from RULER_HEIGHT/SCALE_LANE_HEIGHT to keep this in sync. */
   }
 
   /* ── Corner spacer ── */
@@ -271,7 +347,7 @@
   /* ── Grid row: piano keys + note grid ── */
   .grid-row {
     grid-column: 1 / -1;
-    grid-row: 2;
+    grid-row: 3;
     display: flex;
     align-items: flex-start;
   }
