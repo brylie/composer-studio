@@ -1,11 +1,20 @@
 <script lang="ts">
   import { getEditorState } from './context.svelte.js';
   const { store } = getEditorState();
-  import { isBlackKey, noteName, MAX_MIDI, NOTE_COUNT } from './types.js';
+  import { pitchClassesForScaleEvent } from '../music-theory/index.js';
   import { auditionNote } from './audio.js';
+  import { isBlackKey, noteName, MAX_MIDI, NOTE_COUNT } from './types.js';
 
   // Notes displayed from high (top) to low (bottom)
   const noteRange = Array.from({ length: NOTE_COUNT }, (_, i) => MAX_MIDI - i);
+
+  // In-scale highlighting uses the scale active at the current playhead — a
+  // single segment, since (unlike the note grid) this column isn't tied to a
+  // scrollable beat range (tracks.md#piano-keys-column).
+  const scaleDegrees = $derived.by(() => {
+    const active = store.activeScaleAt(store.currentBeat);
+    return active ? pitchClassesForScaleEvent(active.root, active.mode) : new Set<number>();
+  });
 
   const activeNotes = $derived(
     store.isPlaying
@@ -32,11 +41,13 @@
     {@const black = isBlackKey(midi)}
     {@const isC = midi % 12 === 0}
     {@const active = activeNotes.has(midi)}
+    {@const inScale = scaleDegrees.has(midi % 12)}
     <button
       class="key"
       class:black-key={black}
       class:white-key={!black}
       class:c-note={isC}
+      class:in-scale={inScale}
       class:active
       style="height: {store.rowHeight}px;"
       onclick={() => {
@@ -81,6 +92,11 @@
 
   .c-note {
     border-top: 1px solid #3a3a60;
+  }
+
+  /* ── In-scale highlighting at the playhead (tracks.md) — advisory only ── */
+  .key.in-scale {
+    box-shadow: inset 3px 0 0 var(--color-scale-degree, #38bdf8);
   }
 
   .key.active,

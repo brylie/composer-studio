@@ -1,3 +1,5 @@
+import type { ScaleEvent } from './timeline.js';
+
 export interface Note {
   id: string;
   midiNote: number;
@@ -103,14 +105,21 @@ export interface ClipboardContents {
   notes: Note[];
 }
 
-// Stubs for Phase 6 (scale track) and Phase 10 (layers) ─────────────────────
+// selection.md#activescales-selections-arent-bounded-by-scale-boundaries ───
 
+/**
+ * A selection's beat range sliced at every scale-track boundary it crosses,
+ * each slice clamped to the selection's own bounds (not the underlying
+ * ScaleEvent's full extent on the timeline). A selection entirely within
+ * one scale produces a single-element array.
+ */
 export interface ActiveScaleSegment {
-  // Placeholder — real implementation in Phase 6
-  scale: unknown;
-  start: number;
-  end: number;
+  scale: ScaleEvent;
+  start: number; // beats — clamped to the selection's own beatRange
+  end: number; // beats — likewise clamped
 }
+
+// Stub for Phase 10 (layers) ─────────────────────────────────────────────
 
 export interface Layer {
   // Placeholder — real implementation in Phase 10
@@ -131,7 +140,7 @@ export interface SelectionContext {
   pitchRange: { min: number; max: number } | null;
   beatRange: { start: number; end: number } | null;
   isContiguous: boolean;
-  activeScales: ActiveScaleSegment[]; // [] until Phase 6
+  activeScales: ActiveScaleSegment[];
   activeLayers: Layer[]; // [] until Phase 10
 }
 
@@ -152,5 +161,6 @@ export interface CommandContext extends SelectionContext {
 export interface DocumentSnapshot {
   label: string;
   notes: Note[];
-  // scaleEvents, chordEvents, arrangerSections added as those tracks land (Phase 6+)
+  scaleEvents: ScaleEvent[];
+  // chordEvents, arrangerSections added as those tracks land (Phase 7+)
 }

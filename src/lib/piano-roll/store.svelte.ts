@@ -1,8 +1,10 @@
 import { SvelteSet } from 'svelte/reactivity';
 import { commandRegistry } from './commands/index.js';
 import { CommandHistory, isContiguous } from './history.js';
+import type { ScaleEvent, ScaleTrack, TempoTrack, TimeSignatureTrack } from './timeline.js';
+import { activeEventAt, barBeats, removeEvent, upsertEvent } from './timeline.js';
+import { scaleSegments } from './tracks.js';
 import type {
-  ActiveScaleSegment,
   ChordEvent,
   ClipboardContents,
   CommandContext,
@@ -39,10 +41,22 @@ export function createStore() {
   let totalBeats = $state(64); // 16 bars x 4 beats
   let pixelsPerBeat = $state(80);
   const rowHeight = $state(24);
-  let tempo = $state(122);
   let synthSettings: SynthSettings = $state(structuredClone(DEFAULT_SYNTH));
   let trackName = $state('Untitled Track');
   let interactionMode: GridInteractionMode = $state('draw');
+
+  // ── Timeline event tracks (timeline.md, tracks.md) ─────────────────────────
+  // Single event at beat 0 by default — "a project with no further events
+  // behaves exactly as today" (timeline.md). Tempo automation (more than one
+  // TempoEvent) and a time-signature editing UI are both explicit future
+  // work, not built here; the data model already supports either.
+  let tempoTrack: TempoTrack = $state([{ id: crypto.randomUUID(), beat: 0, bpm: 122 }]);
+  const timeSignatureTrack: TimeSignatureTrack = $state([
+    { id: crypto.randomUUID(), beat: 0, numerator: 4, denominator: 4 },
+  ]);
+  let scaleTrack: ScaleTrack = $state([
+    { id: crypto.randomUUID(), beat: 0, root: 0, mode: 'major' },
+  ]);
 
   // Selection
   const selectedNoteIds = new SvelteSet<string>();
@@ -66,6 +80,11 @@ export function createStore() {
   }
 
   const snapBeats = $derived(4 / snapDenominator);
+
+  // Bar-line beat positions across the timeline, honoring time-signature
+  // changes (timeline.md) — replaces the note grid's previous hardcoded
+  // "every 4 beats" assumption.
+  const barBeatPositions = $derived(barBeats(timeSignatureTrack, totalBeats));
 
   // ── Derived SelectionContext ──────────────────────────────────────────────
 
@@ -94,13 +113,23 @@ export function createStore() {
       beatRange = { start: minBeat, end: maxBeat };
     }
 
+    // A selection can span a scale change — sliced per selection.md's
+    // activeScales, not a single "first scale wins" read.
+    const activeScales = beatRange
+      ? scaleSegments(scaleTrack, beatRange.start, beatRange.end).map((segment) => ({
+          scale: segment.event,
+          start: segment.startBeat,
+          end: segment.endBeat,
+        }))
+      : [];
+
     return {
       notes: selected,
       count,
       pitchRange,
       beatRange,
       isContiguous: isContiguous(selected),
-      activeScales: [] as ActiveScaleSegment[], // Phase 6 stub
+      activeScales,
       activeLayers: [] as Layer[], // Phase 10 stub
     };
   });
@@ -124,7 +153,7 @@ export function createStore() {
   }
 
   function currentSnapshot(): Omit<DocumentSnapshot, 'label'> {
-    return { notes: $state.snapshot(notes) };
+    return { notes: $state.snapshot(notes), scaleEvents: $state.snapshot(scaleTrack) };
   }
 
   function recordHistory(label: string) {
@@ -291,6 +320,23 @@ export function createStore() {
     for (const n of duped) selectedNoteIds.add(n.id);
   }
 
+  // ── Scale track (tracks.md) ──────────────────────────────────────────────
+
+  /**
+   * Adds or replaces the scale marker at `event.beat` (upsertEvent's
+   * replace-at-beat semantics per timeline.md — placing a marker on an
+   * occupied beat moves it, rather than stacking a second one).
+   */
+  function upsertScaleEvent(event: ScaleEvent) {
+    recordHistory('Set scale marker');
+    scaleTrack = upsertEvent(scaleTrack, event);
+  }
+
+  function removeScaleEvent(id: string) {
+    recordHistory('Remove scale marker');
+    scaleTrack = removeEvent(scaleTrack, id);
+  }
+
   // ── Undo / Redo ───────────────────────────────────────────────────────────
 
   /** After restoring `notes` from a history entry, drop selection ids that no longer exist. */
@@ -307,6 +353,7 @@ export function createStore() {
     syncHistory();
     if (!entry) return;
     notes = entry.notes;
+    scaleTrack = entry.scaleEvents;
     pruneSelectionToExistingNotes();
   }
 
@@ -315,6 +362,7 @@ export function createStore() {
     syncHistory();
     if (!entry) return;
     notes = entry.notes;
+    scaleTrack = entry.scaleEvents;
     pruneSelectionToExistingNotes();
   }
 
@@ -416,11 +464,33 @@ export function createStore() {
       return rowHeight;
     },
 
+    /** Backed by tempoTrack[0].bpm (timeline.md) — reads/writes as a plain number, same as before. */
     get tempo() {
-      return tempo;
+      return tempoTrack[0].bpm;
     },
     set tempo(v: number) {
-      tempo = v;
+      tempoTrack = [{ ...tempoTrack[0], bpm: v }, ...tempoTrack.slice(1)];
+    },
+
+    get tempoTrack() {
+      return tempoTrack;
+    },
+
+    get timeSignatureTrack() {
+      return timeSignatureTrack;
+    },
+
+    get scaleTrack() {
+      return scaleTrack;
+    },
+
+    get barBeats() {
+      return barBeatPositions;
+    },
+
+    /** The scale active at a given beat (single segment — for the piano-keys column, not a range). */
+    activeScaleAt(beat: number) {
+      return activeEventAt(scaleTrack, beat);
     },
 
     get synthSettings() {
@@ -510,6 +580,8 @@ export function createStore() {
     redo,
     applyCommandResult,
     executeCommand,
+    upsertScaleEvent,
+    removeScaleEvent,
   };
 }
 

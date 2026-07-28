@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { pitchClassesForChord, pitchClassesForScale, voiceChord } from './index.js';
+import {
+  pitchClassesForChord,
+  pitchClassesForScale,
+  pitchClassesForScaleEvent,
+  voiceChord,
+} from './index.js';
 
 describe('pitchClassesForScale', () => {
   it('returns C major pitch classes', () => {
@@ -10,6 +15,65 @@ describe('pitchClassesForScale', () => {
   it('returns A minor (aeolian) pitch classes', () => {
     const classes = pitchClassesForScale('A', 'aeolian');
     expect(classes).toEqual(new Set([9, 11, 0, 2, 4, 5, 7]));
+  });
+});
+
+describe('pitchClassesForScaleEvent', () => {
+  it('matches pitchClassesForScale for an equivalent numeric root', () => {
+    expect(pitchClassesForScaleEvent(0, 'major')).toEqual(pitchClassesForScale('C', 'major'));
+    expect(pitchClassesForScaleEvent(9, 'aeolian')).toEqual(pitchClassesForScale('A', 'aeolian'));
+  });
+
+  it('normalizes out-of-range pitch classes (negative and >11)', () => {
+    expect(pitchClassesForScaleEvent(12, 'major')).toEqual(pitchClassesForScale('C', 'major'));
+    expect(pitchClassesForScaleEvent(-1, 'major')).toEqual(pitchClassesForScale('B', 'major'));
+  });
+});
+
+// Every scale name offered by ScaleEventEditor.svelte's MODE_GROUPS picker —
+// duplicated here (not imported from the .svelte file) so a typo'd tonal.js
+// scale name is caught as a failing domain test instead of silently
+// resolving to an empty pitch-class set with no error at the UI layer.
+const CURATED_SCALE_NAMES = [
+  'major',
+  'dorian',
+  'phrygian',
+  'lydian',
+  'mixolydian',
+  'aeolian',
+  'locrian',
+  'harmonic minor',
+  'melodic minor',
+  'major pentatonic',
+  'minor pentatonic',
+  'blues',
+  'whole tone',
+  'hungarian minor',
+  'phrygian dominant',
+  'double harmonic major',
+  'hirajoshi',
+  'enigmatic',
+];
+
+describe('curated scale names (ScaleEventEditor.svelte MODE_GROUPS)', () => {
+  it.each(CURATED_SCALE_NAMES)('%s resolves to a non-empty pitch-class set', (name) => {
+    expect(pitchClassesForScale('C', name).size).toBeGreaterThan(0);
+  });
+
+  it('major pentatonic has 5 notes', () => {
+    expect(pitchClassesForScale('C', 'major pentatonic')).toEqual(new Set([0, 2, 4, 7, 9]));
+  });
+
+  it('minor pentatonic has 5 notes', () => {
+    expect(pitchClassesForScale('C', 'minor pentatonic')).toEqual(new Set([0, 3, 5, 7, 10]));
+  });
+
+  it('whole tone has 6 notes, evenly spaced by a whole step', () => {
+    expect(pitchClassesForScale('C', 'whole tone')).toEqual(new Set([0, 2, 4, 6, 8, 10]));
+  });
+
+  it('hirajoshi (Japanese pentatonic) has 5 notes', () => {
+    expect(pitchClassesForScale('C', 'hirajoshi')).toEqual(new Set([0, 2, 3, 7, 8]));
   });
 });
 
