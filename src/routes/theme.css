@@ -4,7 +4,8 @@
   --color-surface-raised: #232342;
 
   /* Actions */
-  --color-accent: #7c5cff;
+  --color-accent: #6b6bd9;
+  --color-accent-strong: #8888ee;
   --color-danger: #ef4444;
 
   /* Piano roll / tracks */
@@ -24,4 +25,5 @@
   /* Music-specific sizing */
   --piano-key-height: 24px;
   --ribbon-height: 96px;
+  --top-bar-height: 40px;
 }

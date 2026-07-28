@@ -1,9 +1,12 @@
 import { getContext, setContext } from 'svelte';
+import type { RibbonUiState } from './ribbon-ui.svelte.js';
+import { createRibbonUiState } from './ribbon-ui.svelte.js';
 import type { Store } from './store.svelte.js';
 import { createStore } from './store.svelte.js';
 
 interface EditorState {
   store: Store;
+  ribbonUi: RibbonUiState;
 }
 
 const KEY = Symbol('editor-state');
@@ -15,7 +18,7 @@ const KEY = Symbol('editor-state');
  * (e.g. Storybook stories, tests).
  */
 export function provideEditorState(): EditorState {
-  const state: EditorState = { store: createStore() };
+  const state: EditorState = { store: createStore(), ribbonUi: createRibbonUiState() };
   setContext(KEY, state);
   return state;
 }

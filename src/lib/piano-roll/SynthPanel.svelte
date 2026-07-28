@@ -305,11 +305,7 @@
 
 <style>
   .synth-panel {
-    width: 220px;
-    flex-shrink: 0;
-    background: #181828;
-    border-left: 1px solid #252540;
-    overflow-y: auto;
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 0;

@@ -1,12 +1,14 @@
 <script lang="ts">
   import type { Action } from 'svelte/action';
   import { getEditorState } from './context.svelte.js';
-  const { store } = getEditorState();
-  import { exportMidi } from './midi-export.js';
-  import Toolbar from './Toolbar.svelte';
-  import PianoKeys from './PianoKeys.svelte';
+  const { store, ribbonUi } = getEditorState();
+  import CommandRibbon from './CommandRibbon.svelte';
   import NoteGrid from './NoteGrid.svelte';
+  import OverlayShell from './OverlayShell.svelte';
+  import PianoKeys from './PianoKeys.svelte';
   import SynthPanel from './SynthPanel.svelte';
+  import Toolbar from './Toolbar.svelte';
+  import TopBar from './TopBar.svelte';
   import { MAX_MIDI } from './types.js';
 
   let velDragNoteId: string | null = $state(null);
@@ -63,10 +65,6 @@
     };
   };
 
-  function handleExport() {
-    exportMidi(store.notes, store.tempo, `${store.trackName}.mid`);
-  }
-
   // ── Velocity lane interaction ──────────────────────────────────────────────
   function velPointerDown(e: PointerEvent) {
     const noteEl = (e.target as HTMLElement).closest<HTMLElement>('[data-vel-note-id]');
@@ -99,32 +97,16 @@
 </script>
 
 <div class="piano-roll">
-  <!-- ── App header ── -->
-  <header class="app-header">
-    <div class="track-info">
-      <span
-        class="track-name"
-        contenteditable="true"
-        onblur={(e) => {
-          store.trackName = ((e.target as HTMLElement).textContent || '').trim() || store.trackName;
-        }}
-        onkeydown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            (e.target as HTMLElement).blur();
-          }
-        }}
-        role="textbox"
-        aria-label="Track name"
-        tabindex="0">{store.trackName}</span
-      >
-      <span class="preview-badge">Preview Mode</span>
-    </div>
-    <button class="export-btn" onclick={handleExport}>Export MIDI</button>
-  </header>
+  <TopBar />
 
-  <!-- ── Toolbar ── -->
-  <Toolbar />
+  {#if !ribbonUi.previewMode}
+    <Toolbar />
+    <CommandRibbon />
+  {/if}
+
+  <!-- Screen-reader announcement of the last command/undo/redo result — reuses
+       the label already produced for the undo stack, per accessibility.md. -->
+  <div class="sr-only" aria-live="polite">{store.history.undoLabel ?? ''}</div>
 
   <!-- ── Main body ── -->
   <div class="body">
@@ -188,10 +170,15 @@
         </div>
       {/if}
     </div>
-
-    <!-- Synth panel -->
-    <SynthPanel />
   </div>
+
+  <OverlayShell
+    open={ribbonUi.soundDrawerOpen}
+    title="Sound"
+    onclose={() => (ribbonUi.soundDrawerOpen = false)}
+  >
+    <SynthPanel />
+  </OverlayShell>
 </div>
 
 <style>
@@ -208,62 +195,16 @@
     user-select: none;
   }
 
-  /* ── App header ── */
-  .app-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 16px;
-    height: 40px;
-    background: #0f0f1e;
-    border-bottom: 1px solid #222238;
-    flex-shrink: 0;
-  }
-
-  .track-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .track-name {
-    font-size: 15px;
-    font-weight: 600;
-    color: #d0d0f0;
-    outline: none;
-    border-radius: 3px;
-    padding: 1px 4px;
-    cursor: text;
-  }
-
-  .track-name:focus {
-    background: #1e1e38;
-    outline: 1px solid #6b6bd9;
-  }
-
-  .preview-badge {
-    font-size: 11px;
-    color: #8888aa;
-    background: #1e1e38;
-    border: 1px solid #333355;
-    border-radius: 4px;
-    padding: 1px 6px;
-  }
-
-  .export-btn {
-    padding: 5px 14px;
-    background: #2a2a45;
-    border: 1px solid #3a3a60;
-    border-radius: 6px;
-    color: #d0d0f0;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.12s;
-  }
-
-  .export-btn:hover {
-    background: #35355a;
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   /* ── Body layout ── */
