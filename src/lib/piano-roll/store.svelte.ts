@@ -342,15 +342,19 @@ export function createStore() {
    * distinct from upsertScaleEvent's add-or-replace because a move must
    * remove the event from its *old* beat first, then re-place it (via
    * upsertEvent's own replace-at-beat semantics if `beat` is already
-   * occupied by a different marker). A no-op (no history entry) when the
-   * target beat is unchanged, so a drag that snaps back to its start
-   * doesn't pollute the undo stack.
+   * occupied by a different marker). The no-op check compares against the
+   * clamped beat (not the raw input) so e.g. dragging a marker already at
+   * beat 0 to a negative beat is correctly recognized as unchanged, rather
+   * than recording a history entry for a mutation that clamps back to the
+   * same position.
    */
   function moveScaleEvent(id: string, beat: number) {
     const existing = scaleTrack.find((e) => e.id === id);
-    if (!existing || existing.beat === beat) return;
+    if (!existing) return;
+    const clampedBeat = Math.max(0, beat);
+    if (existing.beat === clampedBeat) return;
     recordHistory('Move scale marker');
-    scaleTrack = upsertEvent(removeEvent(scaleTrack, id), { ...existing, beat: Math.max(0, beat) });
+    scaleTrack = upsertEvent(removeEvent(scaleTrack, id), { ...existing, beat: clampedBeat });
   }
 
   // ── Undo / Redo ───────────────────────────────────────────────────────────

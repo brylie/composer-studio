@@ -695,6 +695,23 @@ describe('createStore — scale track', () => {
     expect(store.history.canUndo).toBe(false);
   });
 
+  it('moveScaleEvent is a no-op (no history entry) when a negative beat clamps back to the current beat', () => {
+    const store = createStore();
+    // Default marker is already at beat 0 — moving to a negative beat clamps
+    // to 0, which must be recognized as unchanged, not recorded as a move.
+    store.moveScaleEvent(store.scaleTrack[0].id, -5);
+    expect(store.scaleTrack[0].beat).toBe(0);
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('moveScaleEvent clamps a negative beat to 0 when it does change the position', () => {
+    const store = createStore();
+    store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });
+    store.moveScaleEvent('m1', -5);
+    expect(store.scaleTrack.find((e) => e.id === 'm1')?.beat).toBe(0);
+    expect(store.history.undoLabel).toBe('Move scale marker');
+  });
+
   it('activeScaleAt resolves the scale in effect at a given beat', () => {
     const store = createStore();
     store.upsertScaleEvent({ id: 'm1', beat: 8, root: 9, mode: 'aeolian' });

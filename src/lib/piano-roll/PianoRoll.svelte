@@ -149,7 +149,10 @@
     <div class="grid-area">
       <!-- Single shared scroll container for piano keys + grid -->
       <div class="scroll-area" use:scrollAreaAction={autoScrollX}>
-        <div class="scroll-content" style="width: max-content; min-height: 100%;">
+        <div
+          class="scroll-content"
+          style="width: max-content; min-height: 100%; grid-template-rows: {RULER_HEIGHT}px {SCALE_LANE_HEIGHT}px auto;"
+        >
           <!-- Top-left corner (aligned with ruler) -->
           <div class="corner-spacer" style="position: sticky; left: 0; z-index: 30;"></div>
 
@@ -305,8 +308,8 @@
     display: grid;
     /* col 1: piano key width (sticky), col 2: rest */
     grid-template-columns: 64px 1fr;
-    /* row 1: ruler, row 2: scale lane (tracks.md), row 3: piano keys + note grid */
-    grid-template-rows: 24px 26px auto;
+    /* row 1: ruler, row 2: scale lane (tracks.md), row 3: piano keys + note grid —
+       heights set inline from RULER_HEIGHT/SCALE_LANE_HEIGHT to keep this in sync. */
   }
 
   /* ── Corner spacer ── */
