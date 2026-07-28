@@ -418,6 +418,30 @@ describe('createStore — executeCommand', () => {
     expect(store.history.canUndo).toBe(true);
     expect(store.history.undoLabel).toBe('Transpose +5');
   });
+
+  it('returns false and leaves notes/history untouched for an unknown command', () => {
+    const store = createStore();
+    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    store.selectNote('a', false);
+
+    const executed = store.executeCommand('not-a-real-command', { semitones: 5 });
+
+    expect(executed).toBe(false);
+    expect(store.notes[0].midiNote).toBe(60);
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('returns false and leaves notes/history untouched for an inapplicable command', () => {
+    const store = createStore();
+    store.addNote({ id: 'a', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100 });
+    // No selection, so transpose (requires selectAtLeastOne) is inapplicable.
+
+    const executed = store.executeCommand('transpose', { semitones: 5 });
+
+    expect(executed).toBe(false);
+    expect(store.notes[0].midiNote).toBe(60);
+    expect(store.history.canUndo).toBe(false);
+  });
 });
 
 // ── createStore — applyCommandResult ──────────────────────────────────────────

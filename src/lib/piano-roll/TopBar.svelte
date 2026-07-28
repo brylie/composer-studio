@@ -28,7 +28,13 @@
       class="track-name"
       contenteditable="true"
       onblur={(e) => {
-        store.trackName = ((e.target as HTMLElement).textContent || '').trim() || store.trackName;
+        const el = e.target as HTMLElement;
+        const trimmed = (el.textContent || '').trim();
+        if (trimmed) {
+          store.trackName = trimmed;
+        } else {
+          el.textContent = store.trackName;
+        }
       }}
       onkeydown={(e) => {
         if (e.key === 'Enter') {

@@ -11,17 +11,21 @@ export interface RibbonUiState {
   previewMode: boolean;
 }
 
-function prefersRibbonOpenByDefault(): boolean {
-  if (typeof window === 'undefined') return true;
-  return !window.matchMedia('(max-width: 599px)').matches;
-}
-
 export function createRibbonUiState(): RibbonUiState {
   let activeTab: RibbonTabId = $state('transform');
-  let ribbonOpen = $state(prefersRibbonOpenByDefault());
+  // Starts open on every render path (SSR and the client's first hydration
+  // pass) to keep the initial markup identical; the client-only effect below
+  // narrows it to the mobile default once `window` is available. $derived
+  // (rather than $state) so the manual toggle button can still reassign it.
+  let ribbonOpen = $derived(true);
   let paramsDrawerOpen = $state(false);
   let soundDrawerOpen = $state(false);
   let previewMode = $state(false);
+
+  // $effect bodies never run during SSR, so `window` is safely available here.
+  $effect(() => {
+    ribbonOpen = !window.matchMedia('(max-width: 599px)').matches;
+  });
 
   return {
     get activeTab() {
