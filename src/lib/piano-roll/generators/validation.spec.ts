@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { makeBounds, makeNoteDraft, makeNotePlan } from './test-helpers.js';
-import { MAX_GENERATED_NOTES, validateGeneratedResult } from './validation.js';
+import {
+  MAX_GENERATED_NOTES,
+  validateGeneratedResult,
+  validateGeneratorBounds,
+} from './validation.js';
 
 function validate(notes: ReturnType<typeof makeNoteDraft>[], bounds = makeBounds()) {
   const output = makeNotePlan(bounds, notes);
@@ -19,6 +23,21 @@ describe('validateGeneratedResult', () => {
   it('flags a non-finite value', () => {
     const notes = [makeNoteDraft({ eventKey: 'a', midiNote: Number.NaN })];
     expect(validate(notes).map((d) => d.code)).toContain('non-finite-value');
+  });
+
+  it('flags a fractional midiNote — MIDI notes are whole byte values', () => {
+    const notes = [makeNoteDraft({ eventKey: 'a', midiNote: 60.5 })];
+    expect(validate(notes).map((d) => d.code)).toContain('non-finite-value');
+  });
+
+  it('flags a fractional velocity — MIDI velocities are whole byte values', () => {
+    const notes = [makeNoteDraft({ eventKey: 'a', velocity: 100.5 })];
+    expect(validate(notes).map((d) => d.code)).toContain('non-finite-value');
+  });
+
+  it('allows fractional startBeat and durationBeats', () => {
+    const notes = [makeNoteDraft({ eventKey: 'a', startBeat: 0.25, durationBeats: 0.5 })];
+    expect(validate(notes).map((d) => d.code)).not.toContain('non-finite-value');
   });
 
   it('flags a pitch outside the generator pitch bounds', () => {
@@ -82,6 +101,26 @@ describe('validateGeneratedResult', () => {
     );
   });
 
+  it('warns on a duplicate eventKey, distinct from the pitch/start/duration duplicate check', () => {
+    const notes = [
+      makeNoteDraft({ eventKey: 'shared', midiNote: 60, startBeat: 0, durationBeats: 1 }),
+      makeNoteDraft({ eventKey: 'shared', midiNote: 67, startBeat: 2, durationBeats: 1 }),
+    ];
+    const diagnostics = validate(notes);
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({ level: 'warning', code: 'duplicate-event-key' }),
+    );
+    expect(diagnostics.map((d) => d.code)).not.toContain('duplicate-note');
+  });
+
+  it('does not warn on distinct eventKeys', () => {
+    const notes = [
+      makeNoteDraft({ eventKey: 'a', midiNote: 60, startBeat: 0 }),
+      makeNoteDraft({ eventKey: 'b', midiNote: 64, startBeat: 1 }),
+    ];
+    expect(validate(notes).map((d) => d.code)).not.toContain('duplicate-event-key');
+  });
+
   it('warns when output is not sorted by start beat then pitch', () => {
     const notes = [
       makeNoteDraft({ eventKey: 'a', midiNote: 60, startBeat: 1 }),
@@ -102,5 +141,48 @@ describe('validateGeneratedResult', () => {
       makeNoteDraft({ eventKey: `n${String(i)}`, midiNote: 60, startBeat: 0 }),
     );
     expect(validate(notes).map((d) => d.code)).not.toContain('max-notes-exceeded');
+  });
+});
+
+describe('validateGeneratorBounds', () => {
+  it('returns no diagnostics for well-formed bounds', () => {
+    expect(validateGeneratorBounds(makeBounds())).toEqual([]);
+  });
+
+  it('flags non-finite time or pitch values', () => {
+    expect(
+      validateGeneratorBounds(makeBounds({ time: { startBeat: 0, endBeat: Infinity } })).map(
+        (d) => d.code,
+      ),
+    ).toContain('bounds-non-finite');
+    expect(
+      validateGeneratorBounds(makeBounds({ pitch: { minMidi: Number.NaN, maxMidi: 80 } })).map(
+        (d) => d.code,
+      ),
+    ).toContain('bounds-non-finite');
+  });
+
+  it('flags reversed time bounds', () => {
+    const diagnostics = validateGeneratorBounds(makeBounds({ time: { startBeat: 4, endBeat: 0 } }));
+    expect(diagnostics.map((d) => d.code)).toContain('bounds-time-reversed');
+  });
+
+  it('flags equal time endpoints (startBeat must be strictly less than endBeat)', () => {
+    const diagnostics = validateGeneratorBounds(makeBounds({ time: { startBeat: 2, endBeat: 2 } }));
+    expect(diagnostics.map((d) => d.code)).toContain('bounds-time-reversed');
+  });
+
+  it('flags reversed pitch bounds', () => {
+    const diagnostics = validateGeneratorBounds(
+      makeBounds({ pitch: { minMidi: 80, maxMidi: 60 } }),
+    );
+    expect(diagnostics.map((d) => d.code)).toContain('bounds-pitch-reversed');
+  });
+
+  it('flags pitch bounds outside the global MIDI range', () => {
+    const diagnostics = validateGeneratorBounds(
+      makeBounds({ pitch: { minMidi: 0, maxMidi: 200 } }),
+    );
+    expect(diagnostics.map((d) => d.code)).toContain('bounds-pitch-out-of-range');
   });
 });

@@ -33,6 +33,11 @@ describe('deriveSeed', () => {
       expect(seed).toBeLessThan(2 ** 32);
     }
   });
+
+  it('does not collide when a separator falls at a different point inside a key part', () => {
+    // A plain ':'-joined key would encode both of these as "1:0:a:b:c".
+    expect(deriveSeed(1, 0, 'a:b', 'c')).not.toBe(deriveSeed(1, 0, 'a', 'b:c'));
+  });
 });
 
 describe('deriveEventKey', () => {
@@ -45,5 +50,10 @@ describe('deriveEventKey', () => {
     expect(deriveEventKey('session-2', 'node-1', 0)).not.toBe(base);
     expect(deriveEventKey('session-1', 'node-2', 0)).not.toBe(base);
     expect(deriveEventKey('session-1', 'node-1', 1)).not.toBe(base);
+  });
+
+  it('does not collide when a separator falls at a different point inside a part', () => {
+    // A plain ':'-joined key would encode both of these as "a:b:c:0".
+    expect(deriveEventKey('a:b', 'c', 0)).not.toBe(deriveEventKey('a', 'b:c', 0));
   });
 });

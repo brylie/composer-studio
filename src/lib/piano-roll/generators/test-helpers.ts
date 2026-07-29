@@ -10,6 +10,7 @@ import type {
   GeneratorContext,
   GeneratorOperatorDescriptor,
   NotePlan,
+  PlanPort,
   VariationState,
 } from './types.js';
 
@@ -155,8 +156,11 @@ export function makeHarmonyOnlyOperator(id: string, version = 1): GeneratorOpera
 /**
  * A source operator whose single note is randomized from
  * `request.variation.seed`, honoring `locks.pitch` the way a real pitch
- * operator would: locked rerolls reuse a fixed dimension sub-seed (ignoring
- * generation) instead of deriving a fresh one per generation.
+ * operator would: `variation.seed` is already node-scoped and
+ * generation-independent (the evaluator derives it that way), so combining
+ * it with `generation` only when unlocked — and with a fixed `0` in place of
+ * generation when locked — keeps a locked reroll stable across generations
+ * while still varying by the session's actual seed.
  */
 export function makeSeededPitchSourceOperator(
   id: string,
@@ -171,9 +175,11 @@ export function makeSeededPitchSourceOperator(
     outputs: { out: { kind: 'notes' } },
     getDefaultParams: () => ({}),
     process: (_ctx, _inputs, request) => {
-      const pitchSeed = request.variation.locks.pitch
-        ? 0
-        : deriveSeed(request.variation.seed, request.variation.generation, 'pitch');
+      const pitchSeed = deriveSeed(
+        request.variation.seed,
+        request.variation.locks.pitch ? 0 : request.variation.generation,
+        'pitch',
+      );
       const random = createSeededRandom(pitchSeed);
       const midiNote = 60 + Math.floor(random() * 12);
       return {
@@ -217,6 +223,35 @@ export function makeManyNotesSourceOperator(
         ),
       ),
     }),
+  };
+}
+
+/**
+ * An operator with an arbitrary declared port shape and process()
+ * implementation — for tests that need an operator to misbehave in a
+ * specific way (return an undeclared port, the wrong plan kind, an array on
+ * a non-multiple port, embed a diagnostic, embed invalid bounds, ...)
+ * without a one-off named fixture per scenario.
+ */
+export function makeCustomOperator(
+  id: string,
+  outputs: Record<string, PlanPort>,
+  process: GeneratorOperatorDescriptor['process'],
+  opts: {
+    inputs?: Record<string, PlanPort>;
+    role?: GeneratorOperatorDescriptor['role'];
+    version?: number;
+  } = {},
+): GeneratorOperatorDescriptor {
+  return {
+    id,
+    version: opts.version ?? 1,
+    label: id,
+    role: opts.role ?? 'source',
+    inputs: opts.inputs ?? {},
+    outputs,
+    getDefaultParams: () => ({}),
+    process,
   };
 }
 

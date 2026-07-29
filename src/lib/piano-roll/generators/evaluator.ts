@@ -17,15 +17,108 @@ import type {
   NotePlan,
   VariationState,
 } from './types.js';
-import { validateGeneratedResult } from './validation.js';
+import { validateGeneratedResult, validateGeneratorBounds } from './validation.js';
 
 function emptyNotePlan(bounds: GeneratorEvaluationRequest['bounds']): NotePlan {
   return { kind: 'notes', bounds, diagnostics: [], notes: [] };
 }
 
-/** A node's own sub-seed, independent of every other node's (generators.md §5 evaluator step 4). */
+/**
+ * A node's own sub-seed, independent of every other node's (generators.md §5
+ * evaluator step 4) — and independent of `generation`, so a locked dimension
+ * can derive a sub-seed from `variation.seed` that stays put across rerolls
+ * instead of changing on every generation bump. Operators combine this seed
+ * with `variation.generation` themselves (only when the dimension is
+ * unlocked) via `deriveSeed(variation.seed, variation.generation, 'pitch')`.
+ */
 function nodeVariation(base: VariationState, nodeId: string): VariationState {
-  return { ...base, seed: deriveSeed(base.seed, base.generation, nodeId) };
+  return { ...base, seed: deriveSeed(base.seed, 0, nodeId) };
+}
+
+/**
+ * Validates the record an operator's process() (or bypassOutputs) actually
+ * produced against its own descriptor (generators.md §5 evaluator step 6):
+ * undeclared ports, array-vs-single shape against `multiple`, plan kind, and
+ * required-output presence. A port that fails any check is dropped instead
+ * of being stored for downstream nodes — e.g. an operator declaring a
+ * 'notes' output that accidentally returns a HarmonyPlan must not reach a
+ * downstream node that calls `plan.notes.map(...)`. Each surviving plan's
+ * own bounds and diagnostics are also folded in, so operator-level
+ * diagnostics aren't silently dropped just because they didn't happen to be
+ * on the recipe's final output.
+ */
+function validateOperatorOutputs(
+  node: GeneratorNodeInstance,
+  operator: GeneratorOperatorDescriptor,
+  outputs: Record<string, MusicPlan | MusicPlan[]>,
+): { outputs: Record<string, MusicPlan | MusicPlan[]>; diagnostics: GeneratorDiagnostic[] } {
+  const validated: Record<string, MusicPlan | MusicPlan[]> = {};
+  const diagnostics: GeneratorDiagnostic[] = [];
+
+  for (const [portKey, value] of Object.entries(outputs)) {
+    if (!Object.hasOwn(operator.outputs, portKey)) {
+      diagnostics.push({
+        level: 'error',
+        code: 'undeclared-output-port',
+        message: `Node "${node.id}" returned an undeclared output port "${portKey}".`,
+        nodeId: node.id,
+        port: portKey,
+      });
+      continue;
+    }
+
+    const port = operator.outputs[portKey];
+    const isArray = Array.isArray(value);
+    if (isArray && !port.multiple) {
+      diagnostics.push({
+        level: 'error',
+        code: 'output-multiplicity-mismatch',
+        message: `Node "${node.id}" output port "${portKey}" returned multiple plans, but the port does not declare multiple: true.`,
+        nodeId: node.id,
+        port: portKey,
+      });
+      continue;
+    }
+
+    const plans = isArray ? value : [value];
+    const mismatched = plans.find((plan) => plan.kind !== port.kind);
+    if (mismatched) {
+      diagnostics.push({
+        level: 'error',
+        code: 'output-kind-mismatch',
+        message: `Node "${node.id}" output port "${portKey}" declares "${port.kind}" but produced "${mismatched.kind}".`,
+        nodeId: node.id,
+        port: portKey,
+      });
+      continue;
+    }
+
+    for (const plan of plans) {
+      diagnostics.push(
+        ...validateGeneratorBounds(plan.bounds).map((d) => ({
+          ...d,
+          nodeId: node.id,
+          port: portKey,
+        })),
+      );
+      diagnostics.push(...plan.diagnostics);
+    }
+    validated[portKey] = value;
+  }
+
+  for (const [portKey, port] of Object.entries(operator.outputs)) {
+    if (!port.optional && !Object.hasOwn(validated, portKey)) {
+      diagnostics.push({
+        level: 'error',
+        code: 'missing-required-output',
+        message: `Node "${node.id}" did not produce its required output port "${portKey}".`,
+        nodeId: node.id,
+        port: portKey,
+      });
+    }
+  }
+
+  return { outputs: validated, diagnostics };
 }
 
 /**
@@ -78,7 +171,10 @@ export function evaluateGeneratorRecipe(
   operators: ReadonlyMap<string, GeneratorOperatorDescriptor>,
 ): GeneratorResult {
   const { recipe, bounds, variation, includeTrace } = request;
-  const diagnostics: GeneratorDiagnostic[] = [...validateRecipe(recipe, operators)];
+  const diagnostics: GeneratorDiagnostic[] = [
+    ...validateGeneratorBounds(bounds),
+    ...validateRecipe(recipe, operators),
+  ];
 
   if (diagnostics.some((d) => d.level === 'error')) {
     return { output: emptyNotePlan(bounds), notes: [], diagnostics };
@@ -137,6 +233,10 @@ export function evaluateGeneratorRecipe(
       });
     }
 
+    const validatedOutputs = validateOperatorOutputs(node, operator, outputs);
+    diagnostics.push(...validatedOutputs.diagnostics);
+    outputs = validatedOutputs.outputs;
+
     outputsByNode.set(node.id, outputs);
     if (includeTrace) trace.push({ nodeId: node.id, outputs });
   }
@@ -163,6 +263,7 @@ export function evaluateGeneratorRecipe(
   }
 
   let notes = finalOutput.notes;
+  let output: MusicPlan = finalOutput;
   const resultDiagnostics = validateGeneratedResult(
     { output: finalOutput, notes, diagnostics: [] },
     bounds,
@@ -170,9 +271,12 @@ export function evaluateGeneratorRecipe(
   diagnostics.push(...resultDiagnostics);
 
   // "returns a diagnostic and no preview rather than silently truncating" (generators.md §14).
+  // Cleared on both the top-level notes and the returned plan, so a caller
+  // reading result.output.notes doesn't see the dropped preview reappear.
   if (resultDiagnostics.some((d) => d.code === 'max-notes-exceeded')) {
     notes = [];
+    output = { ...finalOutput, notes: [] };
   }
 
-  return { output: finalOutput, notes, diagnostics, trace: finalTrace };
+  return { output, notes, diagnostics, trace: finalTrace };
 }

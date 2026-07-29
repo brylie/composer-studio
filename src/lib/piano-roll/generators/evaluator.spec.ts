@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { evaluateGeneratorRecipe } from './evaluator.js';
 import {
   makeBounds,
+  makeCustomOperator,
   makeGeneratorContext,
   makeHarmonyOnlyOperator,
   makeHarmonySourceOperator,
   makeManyNotesSourceOperator,
   makeMergeOperator,
   makeNoteDraft,
+  makeNotePlan,
   makeOperatorMap,
   makeSeededPitchSourceOperator,
   makeSourceOperator,
@@ -140,7 +142,7 @@ describe('evaluateGeneratorRecipe', () => {
     expect(new Set(results).size).toBeGreaterThan(1);
   });
 
-  it('keeps a locked dimension stable across rerolls', () => {
+  it('keeps a locked dimension stable across rerolls, but still varies by the session seed', () => {
     const operators = makeOperatorMap(makeSeededPitchSourceOperator('source'));
     const recipe: GeneratorRecipe = {
       id: 'r',
@@ -149,20 +151,27 @@ describe('evaluateGeneratorRecipe', () => {
       edges: [],
       output: { nodeId: 'a', port: 'out' },
     };
-    const lockedVariation = makeVariation({
-      seed: 7,
-      locks: { ...makeVariation().locks, pitch: true },
+    const lockedPitchesFor = (seed: number) =>
+      Array.from({ length: 5 }, (_, generation) => {
+        const locked = makeVariation({
+          seed,
+          generation,
+          locks: { ...makeVariation().locks, pitch: true },
+        });
+        return evaluateGeneratorRecipe(ctx, makeRequest(recipe, { variation: locked }), operators)
+          .notes[0].midiNote;
+      });
+
+    // Stable across generations for each fixed seed...
+    const lockedPitchPerSeed = Array.from({ length: 8 }, (_, seed) => {
+      const pitches = lockedPitchesFor(seed);
+      expect(new Set(pitches).size).toBe(1);
+      return pitches[0];
     });
-    const lockedPitches = Array.from(
-      { length: 5 },
-      (_, generation) =>
-        evaluateGeneratorRecipe(
-          ctx,
-          makeRequest(recipe, { variation: { ...lockedVariation, generation } }),
-          operators,
-        ).notes[0].midiNote,
-    );
-    expect(new Set(lockedPitches).size).toBe(1);
+    // ...but not pinned to one hardcoded value regardless of the session's
+    // actual seed (a single pair could coincidentally collide on the same
+    // pitch out of only 12 possibilities, so this checks a spread of seeds).
+    expect(new Set(lockedPitchPerSeed).size).toBeGreaterThan(1);
   });
 
   it('honors time and pitch bounds compliance diagnostics without discarding valid notes', () => {
@@ -192,6 +201,10 @@ describe('evaluateGeneratorRecipe', () => {
     const result = evaluateGeneratorRecipe(ctx, makeRequest(recipe), operators);
     expect(result.diagnostics.map((d) => d.code)).toContain('max-notes-exceeded');
     expect(result.notes).toEqual([]);
+    // The returned plan must agree with the top-level notes — a caller
+    // reading result.output.notes shouldn't see the dropped preview reappear.
+    expect(result.output.kind).toBe('notes');
+    expect(result.output.kind === 'notes' && result.output.notes).toEqual([]);
   });
 
   it('returns error diagnostics and an empty result for a cyclic recipe, without throwing', () => {
@@ -310,5 +323,204 @@ describe('evaluateGeneratorRecipe', () => {
     const second = evaluateGeneratorRecipe(ctx, request, operators);
     expect(first.trace?.map((t) => t.nodeId)).toEqual(['a', 'b']);
     expect(first.trace).toEqual(second.trace);
+  });
+});
+
+describe('evaluateGeneratorRecipe — bounds validation', () => {
+  const ctx = makeGeneratorContext();
+  const trivialRecipe: GeneratorRecipe = {
+    id: 'r',
+    version: 1,
+    nodes: [node('a', 'source')],
+    edges: [],
+    output: { nodeId: 'a', port: 'out' },
+  };
+  const operators = makeOperatorMap(
+    makeSourceOperator('source', [makeNoteDraft({ eventKey: 'a', midiNote: 60, startBeat: 0 })]),
+  );
+
+  it('rejects reversed time bounds without running the recipe', () => {
+    const bounds = makeBounds({ time: { startBeat: 4, endBeat: 0 } });
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(trivialRecipe, { bounds }), operators);
+    expect(result.diagnostics.map((d) => d.code)).toContain('bounds-time-reversed');
+    expect(result.notes).toEqual([]);
+  });
+
+  it('rejects equal time endpoints (startBeat must be strictly less than endBeat)', () => {
+    const bounds = makeBounds({ time: { startBeat: 2, endBeat: 2 } });
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(trivialRecipe, { bounds }), operators);
+    expect(result.diagnostics.map((d) => d.code)).toContain('bounds-time-reversed');
+    expect(result.notes).toEqual([]);
+  });
+
+  it('rejects non-finite bounds values', () => {
+    const bounds = makeBounds({ time: { startBeat: 0, endBeat: Infinity } });
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(trivialRecipe, { bounds }), operators);
+    expect(result.diagnostics.map((d) => d.code)).toContain('bounds-non-finite');
+    expect(result.notes).toEqual([]);
+  });
+
+  it('rejects reversed pitch bounds', () => {
+    const bounds = makeBounds({ pitch: { minMidi: 80, maxMidi: 60 } });
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(trivialRecipe, { bounds }), operators);
+    expect(result.diagnostics.map((d) => d.code)).toContain('bounds-pitch-reversed');
+    expect(result.notes).toEqual([]);
+  });
+
+  it('rejects pitch bounds outside the global MIDI range', () => {
+    const bounds = makeBounds({ pitch: { minMidi: 0, maxMidi: 200 } });
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(trivialRecipe, { bounds }), operators);
+    expect(result.diagnostics.map((d) => d.code)).toContain('bounds-pitch-out-of-range');
+    expect(result.notes).toEqual([]);
+  });
+
+  it('accepts well-formed bounds', () => {
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(trivialRecipe), operators);
+    expect(result.diagnostics).toEqual([]);
+  });
+});
+
+describe('evaluateGeneratorRecipe — operator output validation', () => {
+  const ctx = makeGeneratorContext();
+
+  it('drops an undeclared output port instead of storing it for downstream nodes', () => {
+    const validNotes = [makeNoteDraft({ eventKey: 'a', midiNote: 60, startBeat: 0 })];
+    const operators = makeOperatorMap(
+      makeCustomOperator('bad-source', { out: { kind: 'notes' } }, (_ctx, _inputs, request) => ({
+        out: makeNotePlan(request.bounds, validNotes),
+        extra: makeNotePlan(request.bounds, []),
+      })),
+    );
+    const recipe: GeneratorRecipe = {
+      id: 'r',
+      version: 1,
+      nodes: [node('a', 'bad-source')],
+      edges: [],
+      output: { nodeId: 'a', port: 'out' },
+    };
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(recipe), operators);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'undeclared-output-port', nodeId: 'a', port: 'extra' }),
+    );
+    expect(result.notes).toEqual(validNotes); // the declared, valid port still propagates
+  });
+
+  it('drops an array returned on a port that does not declare multiple: true', () => {
+    const operators = makeOperatorMap(
+      makeCustomOperator('bad-source', { out: { kind: 'notes' } }, (_ctx, _inputs, request) => ({
+        out: [makeNotePlan(request.bounds, []), makeNotePlan(request.bounds, [])],
+      })),
+    );
+    const recipe: GeneratorRecipe = {
+      id: 'r',
+      version: 1,
+      nodes: [node('a', 'bad-source')],
+      edges: [],
+      output: { nodeId: 'a', port: 'out' },
+    };
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(recipe), operators);
+    expect(result.diagnostics.map((d) => d.code)).toContain('output-multiplicity-mismatch');
+    expect(result.notes).toEqual([]);
+  });
+
+  it('flags a required output port the operator never produced', () => {
+    const operators = makeOperatorMap(
+      makeCustomOperator('bad-source', { out: { kind: 'notes' } }, () => ({})),
+    );
+    const recipe: GeneratorRecipe = {
+      id: 'r',
+      version: 1,
+      nodes: [node('a', 'bad-source')],
+      edges: [],
+      output: { nodeId: 'a', port: 'out' },
+    };
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(recipe), operators);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'missing-required-output', nodeId: 'a', port: 'out' }),
+    );
+    expect(result.notes).toEqual([]);
+  });
+
+  it('drops a plan whose kind does not match its declared output port, and never passes it downstream', () => {
+    // Declares a 'notes' output but actually returns a HarmonyPlan — the
+    // exact "operator lies about its own contract" scenario that used to
+    // reach a downstream node's plan.notes.map(...) and throw.
+    const operators = makeOperatorMap(
+      makeCustomOperator('lying-source', { out: { kind: 'notes' } }, (_ctx, _inputs, request) => ({
+        out: { kind: 'harmony', bounds: request.bounds, diagnostics: [], segments: [] },
+      })),
+      makeCustomOperator(
+        'safe-consumer',
+        { out: { kind: 'notes' } },
+        (_ctx, inputs, request) => ({
+          out: makeNotePlan(
+            request.bounds,
+            Object.hasOwn(inputs, 'in') && !Array.isArray(inputs.in) && inputs.in.kind === 'notes'
+              ? inputs.in.notes
+              : [],
+          ),
+        }),
+        { inputs: { in: { kind: 'notes', optional: true } } },
+      ),
+    );
+    const recipe: GeneratorRecipe = {
+      id: 'r',
+      version: 1,
+      nodes: [node('a', 'lying-source'), node('b', 'safe-consumer')],
+      edges: [{ from: { nodeId: 'a', port: 'out' }, to: { nodeId: 'b', port: 'in' } }],
+      output: { nodeId: 'b', port: 'out' },
+    };
+    expect(() => evaluateGeneratorRecipe(ctx, makeRequest(recipe), operators)).not.toThrow();
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(recipe), operators);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'output-kind-mismatch', nodeId: 'a', port: 'out' }),
+    );
+    expect(result.notes).toEqual([]); // the mismatched plan never reached "safe-consumer"
+  });
+
+  it('surfaces an operator plan’s own embedded diagnostics in the evaluation result', () => {
+    const embedded = {
+      level: 'warning' as const,
+      code: 'test-operator-diagnostic',
+      message: 'from the plan',
+    };
+    const operators = makeOperatorMap(
+      makeCustomOperator('source', { out: { kind: 'notes' } }, (_ctx, _inputs, request) => ({
+        out: { kind: 'notes', bounds: request.bounds, diagnostics: [embedded], notes: [] },
+      })),
+    );
+    const recipe: GeneratorRecipe = {
+      id: 'r',
+      version: 1,
+      nodes: [node('a', 'source')],
+      edges: [],
+      output: { nodeId: 'a', port: 'out' },
+    };
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(recipe), operators);
+    expect(result.diagnostics).toContainEqual(embedded);
+  });
+
+  it('flags an output plan whose own bounds are invalid', () => {
+    const operators = makeOperatorMap(
+      makeCustomOperator('source', { out: { kind: 'notes' } }, () => ({
+        out: {
+          kind: 'notes',
+          bounds: makeBounds({ time: { startBeat: 4, endBeat: 0 } }),
+          diagnostics: [],
+          notes: [],
+        },
+      })),
+    );
+    const recipe: GeneratorRecipe = {
+      id: 'r',
+      version: 1,
+      nodes: [node('a', 'source')],
+      edges: [],
+      output: { nodeId: 'a', port: 'out' },
+    };
+    const result = evaluateGeneratorRecipe(ctx, makeRequest(recipe), operators);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'bounds-time-reversed', nodeId: 'a', port: 'out' }),
+    );
   });
 });

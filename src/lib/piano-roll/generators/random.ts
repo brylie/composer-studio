@@ -18,6 +18,16 @@ function hashToUint32(input: string): number {
 }
 
 /**
+ * Length-prefixes each part before joining, so ('a:b', 'c') and ('a', 'b:c')
+ * — or any other split that only differs in where a separator falls inside a
+ * part — can never encode to the same string. A plain `parts.join(':')`
+ * would collide on both of the above.
+ */
+function encodeParts(parts: (string | number)[]): string {
+  return parts.map((part) => `${String(String(part).length)}:${String(part)}`).join('');
+}
+
+/**
  * Derives an independent sub-seed for one dimension of a session's seed
  * (generators.md §4.5: rhythmSeed/pitchSeed/voicingSeed) or for one node in a
  * recipe (generators.md §5 evaluator step 4). Deterministic: the same
@@ -30,7 +40,7 @@ export function deriveSeed(
   generation: number,
   ...keyParts: (string | number)[]
 ): number {
-  return hashToUint32([seed, generation, ...keyParts].join(':'));
+  return hashToUint32(encodeParts([seed, generation, ...keyParts]));
 }
 
 /**
@@ -45,5 +55,5 @@ export function deriveEventKey(
   nodeId: string,
   position: number | string,
 ): string {
-  return `${sessionId}:${nodeId}:${String(position)}`;
+  return encodeParts([sessionId, nodeId, position]);
 }

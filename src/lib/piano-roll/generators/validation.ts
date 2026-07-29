@@ -48,20 +48,33 @@ export function validateGeneratedResult(
   }
 
   const seenIdentities = new Set<string>();
+  const seenEventKeys = new Set<string>();
   for (const note of notes) {
     if (
-      !Number.isFinite(note.midiNote) ||
+      !Number.isInteger(note.midiNote) ||
       !Number.isFinite(note.startBeat) ||
       !Number.isFinite(note.durationBeats) ||
-      !Number.isFinite(note.velocity)
+      !Number.isInteger(note.velocity)
     ) {
+      // midiNote/velocity are MIDI byte values and must be whole numbers;
+      // startBeat/durationBeats may be fractional. Number.isInteger already
+      // excludes NaN/Infinity, so this also catches the non-finite case.
       diagnostics.push({
         level: 'error',
         code: 'non-finite-value',
-        message: `Note "${note.eventKey}" has a non-finite midiNote/startBeat/durationBeats/velocity.`,
+        message: `Note "${note.eventKey}" has a non-integer midiNote/velocity or a non-finite startBeat/durationBeats.`,
       });
       continue;
     }
+
+    if (seenEventKeys.has(note.eventKey)) {
+      diagnostics.push({
+        level: 'warning',
+        code: 'duplicate-event-key',
+        message: `Duplicate eventKey "${note.eventKey}" — keyed rendering and scheduling require unique event keys within an evaluation.`,
+      });
+    }
+    seenEventKeys.add(note.eventKey);
 
     if (
       note.midiNote < MIN_MIDI ||
@@ -124,6 +137,57 @@ export function validateGeneratedResult(
       level: 'warning',
       code: 'unsorted-output',
       message: 'Generated notes are not sorted by start beat then pitch.',
+    });
+  }
+
+  return diagnostics;
+}
+
+/**
+ * Validates a `GeneratorBounds` value itself (generators.md §4.3), before
+ * it's used to drive any rhythm/step-count/loop calculation: finite time and
+ * pitch endpoints, `startBeat < endBeat`, `minMidi <= maxMidi`, and pitch
+ * bounds within the application's global MIDI range.
+ */
+export function validateGeneratorBounds(bounds: GeneratorBounds): GeneratorDiagnostic[] {
+  const diagnostics: GeneratorDiagnostic[] = [];
+  const { time, pitch } = bounds;
+
+  if (
+    !Number.isFinite(time.startBeat) ||
+    !Number.isFinite(time.endBeat) ||
+    !Number.isFinite(pitch.minMidi) ||
+    !Number.isFinite(pitch.maxMidi)
+  ) {
+    diagnostics.push({
+      level: 'error',
+      code: 'bounds-non-finite',
+      message: 'Generator bounds contain a non-finite time or pitch value.',
+    });
+    return diagnostics;
+  }
+
+  if (time.startBeat >= time.endBeat) {
+    diagnostics.push({
+      level: 'error',
+      code: 'bounds-time-reversed',
+      message: `Generator time bounds require startBeat (${String(time.startBeat)}) < endBeat (${String(time.endBeat)}).`,
+    });
+  }
+
+  if (pitch.minMidi > pitch.maxMidi) {
+    diagnostics.push({
+      level: 'error',
+      code: 'bounds-pitch-reversed',
+      message: `Generator pitch bounds require minMidi (${String(pitch.minMidi)}) <= maxMidi (${String(pitch.maxMidi)}).`,
+    });
+  }
+
+  if (pitch.minMidi < MIN_MIDI || pitch.maxMidi > MAX_MIDI) {
+    diagnostics.push({
+      level: 'error',
+      code: 'bounds-pitch-out-of-range',
+      message: `Generator pitch bounds must fall within [${String(MIN_MIDI)}, ${String(MAX_MIDI)}].`,
     });
   }
 
