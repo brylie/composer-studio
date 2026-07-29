@@ -1,6 +1,6 @@
 # Generators Specification
 
-Status: planned
+Status: draft
 
 ## 1. Purpose
 
@@ -46,12 +46,14 @@ interface Note {
   startBeat: number;
   durationBeats: number;
   velocity: number;
+  layerId: string;
 }
 
 interface CommandContext extends SelectionContext {
   allNotes: Note[];
   playhead: number;
   chordTrack: ChordEvent[];
+  activeLayerId: string;
 }
 ```
 
@@ -171,6 +173,8 @@ interface GeneratorBounds {
     minMidi: number;
     maxMidi: number;
   };
+  /** Authoritative policy for notes sustained beyond time.endBeat. */
+  allowTail: boolean;
 }
 ```
 
@@ -184,7 +188,9 @@ Rules:
 - `minMidi <= maxMidi`.
 - Pitch bounds are clamped to `[MIN_MIDI, MAX_MIDI]`.
 - Generated note starts must lie inside the time bounds.
-- Notes should normally end inside the bounds. A generator may expose an explicit `allowTail` option for sustained notes that cross the right edge.
+- Notes must end inside the time bounds unless `bounds.allowTail` is `true`.
+- `bounds.allowTail` is the authoritative tail policy for session, evaluation-request, and operator-request validation. Validators and property tests must read it rather than infer permission from an operator type or parameter.
+- Even when tails are allowed, note starts must remain inside the time bounds.
 - A generator must not silently widen its bounds to make an algorithm succeed.
 
 Bounds are shared generator chrome, not ordinary per-generator parameters. This keeps every generator consistent and allows the grid itself to edit bounds directly.
@@ -194,7 +200,7 @@ Bounds are shared generator chrome, not ordinary per-generator parameters. This 
 Generation should return notes without permanent IDs.
 
 ```typescript
-type NoteDraft = Omit<Note, 'id'>;
+type NoteDraft = Omit<Note, 'id' | 'layerId'>;
 
 interface GeneratedNoteDraft extends NoteDraft {
   /** Stable within a session evaluation; used for keyed rendering and scheduling. */
@@ -204,7 +210,7 @@ interface GeneratedNoteDraft extends NoteDraft {
 }
 ```
 
-Permanent note IDs are assigned only when output is committed. Live output uses deterministic `eventKey` values derived from the session, node, and event position so repeated evaluations can be rendered and scheduled stably without becoming document notes.
+Permanent note IDs and `layerId` values are assigned only when output is committed. Live output uses deterministic `eventKey` values derived from the session, node, and event position and is rendered through `GeneratorSession.targetLayerId`, so repeated evaluations can be rendered and scheduled stably without becoming document notes.
 
 ### 4.5 Seeded variation
 
@@ -231,7 +237,7 @@ const pitchSeed = deriveSeed(seed, generation, 'pitch');
 const voicingSeed = deriveSeed(seed, generation, 'voicing');
 ```
 
-When a dimension is locked, rerolling preserves its previous sub-seed or material. This lets a user keep a rhythm while rerolling pitches, keep a chord progression while rerolling voicings, or keep a contour while changing register.
+When a dimension is locked, rerolling preserves its previous sub-seed or material. This lets a user keep a rhythm while rerolling pitches, keep a contour while changing register, or keep a voicing while rerolling dynamics.
 
 The application should use a small, tested seeded pseudo-random number generator behind a local interface. Generator code must not call `Math.random()`.
 
@@ -257,6 +263,13 @@ Defaults:
 V1 uses one active, ephemeral generator session rather than persistent generator regions.
 
 ```typescript
+interface GeneratorContextRevision {
+  scaleTrackRevision?: number;
+  chordTrackRevision?: number;
+  sourceNotesRevision?: number;
+  timeSignatureTrackRevision?: number;
+}
+
 interface GeneratorSession {
   id: string;
   targetLayerId: string;
@@ -271,6 +284,8 @@ interface GeneratorSession {
     | { kind: 'layer-range'; startBeat: number; endBeat: number };
   result: GeneratorResult | null;
   evaluationRevision: number;
+  /** Context fingerprint used by the last successful evaluation. */
+  evaluatedContextRevision: GeneratorContextRevision | null;
   status: 'ready' | 'stale' | 'evaluating' | 'error';
 }
 ```
@@ -327,6 +342,16 @@ interface RhythmPlan extends MusicPlanBase {
   }>;
 }
 
+interface PitchPlan extends MusicPlanBase {
+  kind: 'pitch';
+  pitches: Array<{
+    midiNote: number;
+    degree?: number;
+    sourceStep?: number;
+    role?: string;
+  }>;
+}
+
 interface EventPlan extends MusicPlanBase {
   kind: 'events';
   events: Array<{
@@ -343,7 +368,7 @@ interface NotePlan extends MusicPlanBase {
   notes: GeneratedNoteDraft[];
 }
 
-type MusicPlan = HarmonyPlan | RhythmPlan | EventPlan | NotePlan;
+type MusicPlan = HarmonyPlan | RhythmPlan | PitchPlan | EventPlan | NotePlan;
 ```
 
 The precise union may grow as real generators require it. The important rule is
@@ -400,7 +425,7 @@ interface GeneratorOperatorDescriptor<
     ctx: GeneratorContext,
     inputs: Record<string, MusicPlan | MusicPlan[]>,
     request: OperatorRequest<TParams>,
-  ): Record<string, MusicPlan>;
+  ): Record<string, MusicPlan | MusicPlan[]>;
 }
 
 interface GeneratorNodeInstance {
@@ -503,6 +528,21 @@ interface GeneratorContext extends CommandContext {
   timeSignatureTrack: TimeSignatureEvent[];
 }
 
+function createGeneratorContext(
+  ctx: CommandContext,
+  layerNotes: Note[],
+  scaleTrack: ScaleEvent[],
+  timeSignatureTrack: TimeSignatureEvent[],
+): GeneratorContext {
+  return {
+    ...ctx,
+    targetLayerId: ctx.activeLayerId,
+    layerNotes,
+    scaleTrack,
+    timeSignatureTrack,
+  };
+}
+
 interface OperatorRequest<TParams extends Record<string, unknown>> {
   bounds: GeneratorBounds;
   params: TParams;
@@ -514,6 +554,7 @@ interface GeneratorEvaluationRequest {
   bounds: GeneratorBounds;
   recipe: GeneratorRecipe;
   variation: VariationState;
+  contextRevision: GeneratorContextRevision;
   includeTrace?: boolean;
 }
 
@@ -529,10 +570,14 @@ interface GeneratorResult {
   output: MusicPlan;
   notes: GeneratedNoteDraft[]; // populated by the final note renderer
   diagnostics: GeneratorDiagnostic[];
-  trace?: Array<{ nodeId: string; outputs: Record<string, MusicPlan> }>;
+  trace?: Array<{
+    nodeId: string;
+    outputs: Record<string, MusicPlan | MusicPlan[]>;
+  }>;
 }
 
 interface GeneratorDescriptor extends CommandDescriptorBase {
+  version: number;
   category: 'generate';
   family: GeneratorFamily;
   tags?: string[];
@@ -542,10 +587,7 @@ interface GeneratorDescriptor extends CommandDescriptorBase {
 }
 ```
 
-`GeneratorDescriptor` is the browser and command-registry entry. A simple
-generator creates a one-node recipe plus a renderer. A compound starter
-generator creates a larger recipe. Future presets may create the same recipe shapes. Musical execution is delegated to the operator
-registry and evaluator:
+`GeneratorDescriptor` is a generator browser and catalog entry that reuses command metadata for labels, icons, applicability, and discovery. It is not itself an executable `CommandDescriptor`, because it does not provide `run()` or `effect()`. A simple generator creates a one-node recipe plus a renderer. A compound starter generator creates a larger recipe. Future presets may create the same recipe shapes. Musical execution is delegated to the operator registry and evaluator:
 
 ```typescript
 function evaluateGeneratorRecipe(
@@ -588,7 +630,11 @@ function commitGeneratorResult(
 ): { notes: Note[]; label: string } {
   const committed = result.notes.map((draft) => {
     const { eventKey: _eventKey, role: _role, sourceStep: _sourceStep, ...noteDraft } = draft;
-    return clampNote({ ...noteDraft, id: crypto.randomUUID() });
+    return clampNote({
+      ...noteDraft,
+      id: crypto.randomUUID(),
+      layerId: ctx.targetLayerId,
+    });
   });
 
   return {
@@ -598,9 +644,7 @@ function commitGeneratorResult(
 }
 ```
 
-Live preview and Apply use the same evaluator output. This preserves the existing
-registry and history architecture while allowing the recipe to remain
-semi-modular and testable.
+Live preview and Apply use the same evaluator output. The application creates `GeneratorContext` by copying `CommandContext.activeLayerId` into `targetLayerId`, and the commit adapter assigns that target layer to every committed note. This preserves the existing registry and history architecture while enforcing the one-layer commit invariant and allowing the recipe to remain semi-modular and testable.
 
 ## 6. Generator session lifecycle
 
@@ -644,7 +688,9 @@ Recomputation is explicitly triggered rather than continuously reacting to every
 - clicks Reroll;
 - clicks Recompute or Refresh after context has changed.
 
-Changing a scale event, chord event, or source note outside the session does not silently change the current preview. Instead, a declared context revision mismatch marks the session **stale** and offers **Recompute**. Playback continues using the last valid result until recomputation succeeds.
+Changing a scale event, chord event, source note, or relevant time-signature event outside the session does not silently change the current preview. Instead, a declared context revision mismatch marks the session **stale** and offers **Recompute**. Playback continues using the last valid result until recomputation succeeds.
+
+After a successful evaluation, application state stores the new `GeneratorResult`, increments `evaluationRevision`, copies `request.contextRevision` into `evaluatedContextRevision`, and sets the status to `ready`. A failed evaluation keeps the previous successful result and `evaluatedContextRevision` unchanged. Staleness compares the current revision only for context dependencies declared by the recipe against `evaluatedContextRevision`; unrelated track changes must not mark the session stale.
 
 Continuous sliders may use a short debounce where performance permits, but the model remains event-triggered rather than reactive to transport movement or unrelated store updates.
 
@@ -1161,10 +1207,10 @@ The reroll control should change only the dimensions the user has left unlocked.
 Examples:
 
 - Lock rhythm, reroll pitches.
-- Lock chord progression, reroll voicing.
+- Lock pitch, reroll rhythm.
 - Lock contour, reroll starting register.
-- Lock bass notes, reroll velocity accents.
-- Lock the first and last motif notes, reroll internal motion.
+- Lock register, reroll contour.
+- Lock voicing, reroll dynamics.
 
 Pinning individual preview notes is a V2 milestone. V1 uses dimension-level locks because they are simpler to explain and test and do not require preserving note identity through rhythm changes, bounds changes, or module reordering.
 
@@ -1178,7 +1224,8 @@ The UI should show the seed and generation number in an advanced section, with a
   "generation": 7,
   "bounds": {
     "time": { "startBeat": 16, "endBeat": 20 },
-    "pitch": { "minMidi": 60, "maxMidi": 76 }
+    "pitch": { "minMidi": 60, "maxMidi": 76 },
+    "allowTail": false
   }
 }
 ```
@@ -1189,15 +1236,9 @@ This recipe snapshot is useful for bug reports, preset sharing, and deterministi
 
 Determinism requires an algorithm version.
 
-```typescript
-interface GeneratorDescriptor<TParams extends Record<string, unknown>> {
-  id: string;
-  version: number;
-  // ...
-}
-```
+`GeneratorDescriptor.version` identifies the starter generator catalog entry, while each `GeneratorOperatorDescriptor.version` identifies the executable algorithm used by a recipe.
 
-Changing musical behavior in a way that changes seeded output increments `version`. Tests may then preserve golden examples for each supported version.
+Changing musical behavior in a way that changes seeded output increments the relevant `version`. Tests may then preserve golden examples for each supported version.
 
 Operator versions support deterministic tests, session checkpoints, bug reports, and a future persistence model. A breaking musical change increments the operator version. Migration support is required only when generator recipes become persisted or shared.
 
@@ -1228,18 +1269,7 @@ Those are worthwhile later, but they are not necessary to prove the generator UX
 
 ### 12.2 Context snapshots and staleness
 
-The session captures or fingerprints the context used for its last evaluation:
-
-```typescript
-interface GeneratorContextRevision {
-  scaleTrackRevision?: number;
-  chordTrackRevision?: number;
-  sourceNotesRevision?: number;
-  timeSignatureTrackRevision?: number;
-}
-```
-
-When a declared dependency changes, the session is marked stale. It does not silently recompute. The user may continue hearing the last valid result or click Recompute to evaluate against the current context.
+Each evaluation request carries the current `GeneratorContextRevision`. On success, the application copies it to `GeneratorSession.evaluatedContextRevision`. When a dependency declared by the recipe no longer matches that stored revision, the session is marked stale. It does not silently recompute. The user may continue hearing the last valid result or click Recompute to evaluate against the current context.
 
 ### 12.3 Future persistent generators
 
@@ -1400,7 +1430,7 @@ output.
 Good candidates:
 
 - every generated note is valid after `clampNote`;
-- output never exceeds bounds unless `allowTail` is enabled;
+- output starts never exceed bounds, and note ends exceed the right bound only when `request.bounds.allowTail` is `true`;
 - `pulses <= steps` for Euclidean rhythm;
 - voice count never exceeds the requested count;
 - scale-constrained generators emit only permitted pitch classes;
@@ -1419,7 +1449,8 @@ Good candidates:
 - Cancel discards the session without document mutation;
 - Apply creates exactly one document-history entry containing the final note mutation;
 - undo after Apply removes the committed notes and does not reopen the session;
-- changing a declared chord, scale, or source dependency marks the session stale without changing its current result;
+- changing a declared chord, scale, source-note, or time-signature dependency marks the session stale without changing its current result;
+- successful evaluation persists the request context revision, while failed evaluation preserves the last successful revision;
 - Recompute updates a stale session against current context;
 - `replace-bounds` previews and removes the correct committed notes on the target layer only;
 - keyboard insertion and drag insertion create equivalent session data;
