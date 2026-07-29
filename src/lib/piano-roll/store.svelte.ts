@@ -23,6 +23,7 @@ import {
   createGeneratorSession,
   declaredDependencies,
   evaluateSession,
+  notesToRemove as generatorNotesToRemove,
   isContextRevisionStale,
   rerollSession,
   setSessionBounds,
@@ -31,7 +32,12 @@ import {
   setVariationLocks,
   stepVariationHistory,
 } from './generators/session.js';
-import type { GeneratorBounds, GeneratorRecipe, VariationLocks } from './generators/types.js';
+import type {
+  GeneratorBounds,
+  GeneratorDiagnostic,
+  GeneratorRecipe,
+  VariationLocks,
+} from './generators/types.js';
 import { CommandHistory, isContiguous } from './history.js';
 import {
   createDefaultLayer,
@@ -299,6 +305,8 @@ export function createStore() {
   // ordinary notes through the same whole-document mutation path every other
   // command uses (applyCommandResult below).
   let _generatorSession: GeneratorSession | null = $state(null);
+  /** Diagnostics from the most recent evaluation attempt, including a failed one's (generators.md §6.2). */
+  let _generatorDiagnostics: GeneratorDiagnostic[] = $state([]);
 
   function generatorContextFor(targetLayerId: string) {
     return createGeneratorContext(
@@ -306,6 +314,7 @@ export function createStore() {
       notes.filter((n) => n.layerId === targetLayerId),
       scaleTrack,
       timeSignatureTrack,
+      targetLayerId,
     );
   }
 
@@ -341,19 +350,38 @@ export function createStore() {
   });
 
   /**
-   * store.notes plus the active session's live preview, converted to
-   * playback-shaped Notes with the session's targetLayerId — fed to the
-   * audio engine only (Toolbar's startPlayback), never to `notes` itself, so
-   * preview output stays out of committed document state until Apply.
+   * Committed note ids the active session's commitMode will remove on Apply
+   * (generators.md §4.6) — the same predicate Apply itself uses, so the live
+   * preview (both playback and grid rendering) shows exactly what Apply
+   * produces instead of old notes plus new ones for replace-selection /
+   * replace-bounds.
+   */
+  const generatorSuppressedNoteIds = $derived.by((): ReadonlySet<string> => {
+    const session = generatorSessionView;
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain returned value, never mutated or read reactively itself
+    return session ? generatorNotesToRemove(session, notes) : new Set<string>();
+  });
+
+  /**
+   * store.notes minus what the active session's commitMode would remove,
+   * plus its live preview converted to playback-shaped Notes with the
+   * session's targetLayerId — fed to the audio engine only (Toolbar's
+   * startPlayback), never to `notes` itself, so preview output stays out of
+   * committed document state until Apply. Preview note ids are namespaced by
+   * session id so they can never collide with a real committed note's
+   * crypto.randomUUID() id.
    */
   const notesWithGeneratorPreview = $derived.by((): Note[] => {
     const session = generatorSessionView;
+    if (!session) return notes;
+    const suppressed = generatorSuppressedNoteIds;
+    const kept = suppressed.size === 0 ? notes : notes.filter((n) => !suppressed.has(n.id));
     const drafts = visibleGeneratorPreviewNotes;
-    if (!session || drafts.length === 0) return notes;
+    if (drafts.length === 0) return kept;
     return [
-      ...notes,
+      ...kept,
       ...drafts.map((draft): Note => ({
-        id: draft.eventKey,
+        id: `preview:${session.id}:${draft.eventKey}`,
         midiNote: draft.midiNote,
         startBeat: draft.startBeat,
         durationBeats: draft.durationBeats,
@@ -365,7 +393,9 @@ export function createStore() {
 
   function evaluateGeneratorSession(session: GeneratorSession): GeneratorSession {
     const ctx = generatorContextFor(session.targetLayerId);
-    return evaluateSession(ctx, session, computeContextRevision(ctx), operatorRegistry).session;
+    const outcome = evaluateSession(ctx, session, computeContextRevision(ctx), operatorRegistry);
+    _generatorDiagnostics = outcome.diagnostics;
+    return outcome.session;
   }
 
   function startGeneratorSession(options: CreateGeneratorSessionOptions) {
@@ -419,11 +449,17 @@ export function createStore() {
    * result as ordinary notes on the target layer through the same
    * applyCommandResult path every other command uses — one document-history
    * entry, no generator-specific mutation/history logic — then closes the
-   * session.
+   * session. Guarded on an actual evaluated result (an empty result is a
+   * valid replace-mode deletion; `null` means it never evaluated) and on the
+   * target layer still existing — either being false means there is nothing
+   * valid to commit, so the session is just closed without touching history.
    */
   function applyGeneratorSession() {
-    if (!_generatorSession) return;
-    applyCommandResult(commitGeneratorResult(notes, _generatorSession));
+    const session = generatorSessionView;
+    if (!session) return;
+    if (session.result && session.status !== 'error' && layerFor(session.targetLayerId)) {
+      applyCommandResult(commitGeneratorResult(notes, session));
+    }
     _generatorSession = null;
   }
 
@@ -796,6 +832,10 @@ export function createStore() {
     pruneSelectionToExistingNotes();
     revalidateActiveLayer();
     disposeLayer(id);
+    // A session targeting the removed layer would otherwise keep evaluating
+    // against a layer that no longer exists, and Apply would resurrect notes
+    // on a deleted layerId (generators.md §4.7's one-layer invariant).
+    if (_generatorSession?.targetLayerId === id) _generatorSession = null;
   }
 
   function renameLayer(id: string, name: string) {
@@ -1083,9 +1123,19 @@ export function createStore() {
       return generatorSessionView;
     },
 
+    /** Diagnostics from the most recent evaluation attempt, including a failed one's (generators.md §6.2). */
+    get generatorDiagnostics() {
+      return _generatorDiagnostics;
+    },
+
     /** Preview notes (gated on the target layer's visibility) for grid rendering (generators.md §6.3). */
     get generatorPreviewNotes() {
       return visibleGeneratorPreviewNotes;
+    },
+
+    /** Committed note ids the active session's commitMode will remove on Apply — grid rendering must suppress these too (generators.md §4.6). */
+    get generatorSuppressedNoteIds() {
+      return generatorSuppressedNoteIds;
     },
 
     /** store.notes plus the active session's live preview — pass to the audio engine's getNotes, not store.notes. */

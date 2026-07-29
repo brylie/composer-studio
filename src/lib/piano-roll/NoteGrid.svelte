@@ -13,8 +13,13 @@
   // rendering concern, doesn't touch store.notes or playback.
   const renderedNotes = $derived.by(() => {
     const layerIndex = new Map(store.layers.map((l, i) => [l.id, i]));
+    // Also drops any note the active generator session's commitMode would
+    // remove on Apply (generators.md §4.6) — otherwise a replace-selection/
+    // replace-bounds preview shows the old notes alongside the new ones
+    // right up until Apply, then they vanish.
+    const suppressed = store.generatorSuppressedNoteIds;
     return store.notes
-      .filter((n) => store.layerFor(n.layerId)?.visible !== false)
+      .filter((n) => store.layerFor(n.layerId)?.visible !== false && !suppressed.has(n.id))
       .slice()
       .sort((a, b) => (layerIndex.get(b.layerId) ?? -1) - (layerIndex.get(a.layerId) ?? -1));
   });
@@ -471,7 +476,7 @@
   <!-- Live generator preview notes (generators.md §6.3) — not selectable,
        draggable, or deletable; rendered above committed notes with a dashed
        outline so they read as distinct even without color. -->
-  {#each previewNotes as note (note.eventKey)}
+  {#each previewNotes as note, previewIndex (previewIndex)}
     {@const noteLeft = note.startBeat * store.pixelsPerBeat}
     {@const noteTop = rowForMidi(note.midiNote) * store.rowHeight + 1}
     {@const noteW = Math.max(6, note.durationBeats * store.pixelsPerBeat - 2)}

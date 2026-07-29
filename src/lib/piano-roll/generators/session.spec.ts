@@ -143,13 +143,17 @@ describe('context revision staleness', () => {
   it('is unaffected by a track the recipe does not declare a dependency on', () => {
     const before = makeGeneratorContext();
     const evaluated = computeContextRevision(before);
+    // Derived from `before` so only chordTrack differs — scaleTrack/notes/
+    // timeSignatureTrack stay structurally identical, keeping this a
+    // genuinely chord-track-only change rather than a coincidental one.
     const after = createGeneratorContext(
       makeCommandContext([], new Set(), {
         chordTrack: [{ id: 'c1', beat: 0, root: 0, quality: 'maj' }],
       }),
-      [],
-      [],
-      [],
+      before.layerNotes,
+      before.scaleTrack,
+      before.timeSignatureTrack,
+      before.targetLayerId,
     );
     const current = computeContextRevision(after);
     // Recipe only declares 'scale-track' — a chord-track-only change must not matter.
@@ -163,12 +167,29 @@ describe('context revision staleness', () => {
       makeCommandContext([], new Set(), {
         chordTrack: [{ id: 'c1', beat: 0, root: 0, quality: 'maj' }],
       }),
-      [],
-      [],
-      [],
+      before.layerNotes,
+      before.scaleTrack,
+      before.timeSignatureTrack,
+      before.targetLayerId,
     );
     const current = computeContextRevision(after);
     expect(isContextRevisionStale(new Set(['chord-track']), evaluated, current)).toBe(true);
+  });
+
+  it('is stale when the time-signature track changes and the recipe declares that dependency', () => {
+    const before = makeGeneratorContext();
+    const evaluated = computeContextRevision(before);
+    const after = createGeneratorContext(
+      makeCommandContext([], new Set()),
+      before.layerNotes,
+      before.scaleTrack,
+      [{ id: 'ts1', beat: 0, numerator: 3, denominator: 4 }],
+      before.targetLayerId,
+    );
+    const current = computeContextRevision(after);
+    expect(isContextRevisionStale(new Set(['time-signature-track']), evaluated, current)).toBe(
+      true,
+    );
   });
 
   it('collects declared dependencies from every node in the recipe', () => {
@@ -197,7 +218,26 @@ describe('rerollSession / stepVariationHistory', () => {
     expect(rerolled.variation.generation).toBe(1);
     expect(rerolled.variation.seed).toBe(1);
     expect(rerolled.variation.locks.rhythm).toBe(true);
-    expect(rerolled.history.checkpoints).toEqual([{ seed: 1, generation: 1 }]);
+    // Generation 0 is seeded as the first checkpoint at session creation, so
+    // a single reroll appends generation 1 rather than starting history fresh.
+    expect(rerolled.history.checkpoints).toEqual([
+      { seed: 1, generation: 0 },
+      { seed: 1, generation: 1 },
+    ]);
+  });
+
+  it('previous variation restores the initial checkpoint after a single reroll', () => {
+    const session = createGeneratorSession({
+      targetLayerId: 'layer-1',
+      name: 'Test',
+      bounds: makeBounds(),
+      recipe: makeOneNodeRecipe('src'),
+      seed: 1,
+    });
+    const rerolled = rerollSession(session);
+    const back = stepVariationHistory(rerolled, 'previous');
+    expect(back.variation.generation).toBe(0);
+    expect(back.variation.seed).toBe(1);
   });
 
   it('a locked dimension is stable across a reroll, an unlocked one varies', () => {
@@ -349,6 +389,26 @@ describe('mergeGeneratedNotes / commitGeneratorResult', () => {
     const result = commitGeneratorResult([kept, removed], session);
     expect(result.notes.map((n) => n.id)).not.toContain('remove');
     expect(result.notes.map((n) => n.id)).toContain('keep');
+  });
+
+  it('replace-selection never removes a captured id that now lives on a different layer', () => {
+    // A selection can span layers; Apply only ever touches the session's own
+    // target layer, so a captured note that turns out to belong to another
+    // layer must survive even though its id was captured.
+    const otherLayerNote = {
+      id: 'remove',
+      midiNote: 62,
+      startBeat: 1,
+      durationBeats: 1,
+      velocity: 90,
+      layerId: 'other-layer',
+    };
+    const session = sessionWithResult({
+      commitMode: 'replace-selection',
+      source: { kind: 'captured-notes', notes: [], sourceNoteIds: ['remove'] },
+    });
+    const result = commitGeneratorResult([otherLayerNote], session);
+    expect(result.notes.map((n) => n.id)).toContain('remove');
   });
 
   it('replace-bounds removes only target-layer notes overlapping the session bounds', () => {

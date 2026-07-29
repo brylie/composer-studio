@@ -106,28 +106,32 @@ export interface CreateGeneratorSessionOptions {
  * preview, per §6.1 step 3.
  */
 export function createGeneratorSession(options: CreateGeneratorSessionOptions): GeneratorSession {
+  const variation: VariationState = {
+    // Derived from a fresh crypto UUID rather than Math.random() — generator
+    // code must never call Math.random() (generators.md §4.5), and this
+    // keeps the one non-deterministic input (a brand-new session's initial
+    // seed) on the same seeded-randomness rails as everything downstream.
+    seed: options.seed ?? hashToUint32(crypto.randomUUID()),
+    generation: 0,
+    locks: { ...DEFAULT_LOCKS, ...options.locks },
+  };
   return {
     id: crypto.randomUUID(),
     targetLayerId: options.targetLayerId,
     name: options.name,
     bounds: options.bounds,
     recipe: options.recipe,
-    variation: {
-      // Derived from a fresh crypto UUID rather than Math.random() — generator
-      // code must never call Math.random() (generators.md §4.5), and this
-      // keeps the one non-deterministic input (a brand-new session's initial
-      // seed) on the same seeded-randomness rails as everything downstream.
-      seed: options.seed ?? hashToUint32(crypto.randomUUID()),
-      generation: 0,
-      locks: { ...DEFAULT_LOCKS, ...options.locks },
-    },
+    variation,
     commitMode: options.commitMode ?? 'insert',
     source: options.source ?? { kind: 'timeline-context' },
     result: null,
     evaluationRevision: 0,
     evaluatedContextRevision: null,
     status: 'stale',
-    history: createSessionHistory(),
+    // Seeded with generation 0 as the first checkpoint (generators.md §6.4)
+    // so Previous Variation can return to the session's starting point after
+    // the first reroll, instead of history starting empty at generation 1.
+    history: pushCheckpoint(createSessionHistory(), createCheckpoint(variation)),
   };
 }
 
@@ -159,6 +163,7 @@ const DEPENDENCY_REVISION_KEYS: Record<
   'active-chord': ['chordTrackRevision'],
   'chord-track': ['chordTrackRevision'],
   selection: ['sourceNotesRevision'],
+  'time-signature-track': ['timeSignatureTrackRevision'],
 };
 
 /** The union of contextDependencies declared by every node's operator in the recipe. */
@@ -298,6 +303,10 @@ export function stepVariationHistory(
     direction === 'previous'
       ? previousCheckpoint(session.history)
       : nextCheckpoint(session.history);
+  // previousCheckpoint/nextCheckpoint return the same reference at either end
+  // of history — treat that as the no-op it is rather than rebuilding an
+  // identical-valued session that would fail a `toBe` identity check.
+  if (history === session.history) return session;
   const checkpoint = currentCheckpoint(history);
   if (!checkpoint) return session;
   return {
@@ -346,15 +355,25 @@ export function setSessionCommitMode(
  * everything. `replace-selection` removes exactly the captured source notes
  * (only meaningful for a `captured-notes` session; a no-op otherwise).
  * `replace-bounds` removes every committed note on the target layer whose
- * time AND pitch overlap the session's own bounds.
+ * time AND pitch overlap the session's own bounds. Exported so the
+ * application layer can derive the exact same suppression set for the live
+ * preview (playback and grid rendering) that Apply will use, rather than the
+ * preview showing captured notes Apply is about to delete.
  */
-function notesToRemove(session: GeneratorSession, allNotes: Note[]): ReadonlySet<string> {
+export function notesToRemove(session: GeneratorSession, allNotes: Note[]): ReadonlySet<string> {
   if (session.commitMode === 'insert') return new Set();
 
   if (session.commitMode === 'replace-selection') {
-    return session.source.kind === 'captured-notes'
-      ? new Set(session.source.sourceNoteIds)
-      : new Set();
+    if (session.source.kind !== 'captured-notes') return new Set();
+    // An ordinary selection can span layers, but Apply only ever touches the
+    // session's target layer — matching by id alone would let a generator on
+    // one layer delete captured notes that actually live on another.
+    const capturedIds = new Set(session.source.sourceNoteIds);
+    return new Set(
+      allNotes
+        .filter((n) => n.layerId === session.targetLayerId && capturedIds.has(n.id))
+        .map((n) => n.id),
+    );
   }
 
   const { time, pitch } = session.bounds;

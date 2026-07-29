@@ -149,7 +149,12 @@ export interface PlanPort {
 }
 
 export type GeneratorContextDependency =
-  'active-scale' | 'scale-track' | 'active-chord' | 'chord-track' | 'selection';
+  | 'active-scale'
+  | 'scale-track'
+  | 'active-chord'
+  | 'chord-track'
+  | 'selection'
+  | 'time-signature-track';
 
 /** What createGeneratorContext(ctx, ...) builds (generators.md §5) — CommandContext plus what generators need beyond the selection itself. */
 export interface GeneratorContext extends CommandContext {
