@@ -13,8 +13,13 @@
   // rendering concern, doesn't touch store.notes or playback.
   const renderedNotes = $derived.by(() => {
     const layerIndex = new Map(store.layers.map((l, i) => [l.id, i]));
+    // Also drops any note the active generator session's commitMode would
+    // remove on Apply (generators.md §4.6) — otherwise a replace-selection/
+    // replace-bounds preview shows the old notes alongside the new ones
+    // right up until Apply, then they vanish.
+    const suppressed = store.generatorSuppressedNoteIds;
     return store.notes
-      .filter((n) => store.layerFor(n.layerId)?.visible !== false)
+      .filter((n) => store.layerFor(n.layerId)?.visible !== false && !suppressed.has(n.id))
       .slice()
       .sort((a, b) => (layerIndex.get(b.layerId) ?? -1) - (layerIndex.get(a.layerId) ?? -1));
   });
@@ -82,6 +87,13 @@
   // Bar-line positions honoring time-signature changes (timeline.md), replacing
   // the previous hardcoded "every 4 beats" CSS repeating-gradient.
   const barLineLefts = $derived(store.barBeats.map((beat) => beat * store.pixelsPerBeat));
+
+  // Live generator preview notes (generators.md §6.3) — already gated on the
+  // target layer's visibility by store.generatorPreviewNotes. Rendered
+  // separately from renderedNotes: they aren't committed document notes, so
+  // they're not selectable/draggable/deletable and use a distinct dashed
+  // outline rather than relying on color alone (generators.md §16).
+  const previewNotes = $derived(store.generatorPreviewNotes);
 
   // Beat-grouping tick positions (tracks.md#effect-on-the-piano-roll-grid) —
   // one tier finer than bar lines, marking each bar's internal pulses.
@@ -461,6 +473,21 @@
     </div>
   {/each}
 
+  <!-- Live generator preview notes (generators.md §6.3) — not selectable,
+       draggable, or deletable; rendered above committed notes with a dashed
+       outline so they read as distinct even without color. -->
+  {#each previewNotes as note, previewIndex (previewIndex)}
+    {@const noteLeft = note.startBeat * store.pixelsPerBeat}
+    {@const noteTop = rowForMidi(note.midiNote) * store.rowHeight + 1}
+    {@const noteW = Math.max(6, note.durationBeats * store.pixelsPerBeat - 2)}
+    {@const noteH = store.rowHeight - 2}
+    <div
+      class="note preview-note"
+      style="left: {noteLeft}px; top: {noteTop}px; width: {noteW}px; height: {noteH}px;"
+      aria-hidden="true"
+    ></div>
+  {/each}
+
   <!-- Drag-to-select rectangle -->
   {#if selRect}
     <div
@@ -619,6 +646,22 @@
 
   .note.locked:hover {
     background: #55557a;
+  }
+
+  /* Live generator preview (generators.md §6.3, §16) — dashed outline and a
+     striped fill distinguish it from committed notes without relying on
+     color alone; pointer-events disabled since preview notes aren't
+     directly editable in V1 (generators.md §6.4). */
+  .preview-note {
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.22),
+      rgba(255, 255, 255, 0.22) 3px,
+      rgba(107, 107, 217, 0.35) 3px,
+      rgba(107, 107, 217, 0.35) 6px
+    );
+    border: 1px dashed #b4b4ff;
+    pointer-events: none;
   }
 
   .resize-handle {

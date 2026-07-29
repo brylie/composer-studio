@@ -1,9 +1,9 @@
 // Domain layer — generator domain and evaluation types (generators.md §4-§6, §11).
 //
-// Phase A only: the data shapes and evaluator contract shared by every
+// Phase A: the data shapes and evaluator contract shared by every
 // generator/operator. Session lifecycle (GeneratorSession, commit mode,
-// staleness) and the catalog-facing GeneratorDescriptor are Phase B/C and
-// deliberately not defined here yet.
+// staleness) now live in session.ts (Phase B). The catalog-facing
+// GeneratorDescriptor is Phase C/D and still deliberately not defined here.
 
 import type { ScaleEvent, TimeSignatureEvent } from '../timeline.js';
 import type { CommandContext, Note } from '../types.js';
@@ -149,7 +149,12 @@ export interface PlanPort {
 }
 
 export type GeneratorContextDependency =
-  'active-scale' | 'scale-track' | 'active-chord' | 'chord-track' | 'selection';
+  | 'active-scale'
+  | 'scale-track'
+  | 'active-chord'
+  | 'chord-track'
+  | 'selection'
+  | 'time-signature-track';
 
 /** What createGeneratorContext(ctx, ...) builds (generators.md §5) — CommandContext plus what generators need beyond the selection itself. */
 export interface GeneratorContext extends CommandContext {

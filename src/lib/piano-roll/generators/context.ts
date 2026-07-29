@@ -9,10 +9,15 @@ export function createGeneratorContext(
   layerNotes: Note[],
   scaleTrack: ScaleEvent[],
   timeSignatureTrack: TimeSignatureEvent[],
+  // Defaults to the active layer so existing single-layer callers/tests are
+  // unaffected, but a session targeting a non-active layer must pass its own
+  // targetLayerId explicitly — otherwise the context silently describes the
+  // wrong layer while layerNotes is correctly filtered by the right one.
+  targetLayerId: string = ctx.activeLayerId,
 ): GeneratorContext {
   return {
     ...ctx,
-    targetLayerId: ctx.activeLayerId,
+    targetLayerId,
     layerNotes,
     scaleTrack,
     timeSignatureTrack,

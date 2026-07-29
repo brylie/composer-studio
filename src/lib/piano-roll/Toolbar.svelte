@@ -21,7 +21,7 @@
     } else {
       store.isPlaying = true;
       startPlayback({
-        getNotes: () => store.notes,
+        getNotes: () => store.notesWithGeneratorPreview,
         getLayerSettings: (layerId) => store.layerFor(layerId)?.instrument ?? DEFAULT_SYNTH,
         getTempo: () => store.tempo,
         getTotalBeats: () => store.totalBeats,
