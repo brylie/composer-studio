@@ -10,6 +10,28 @@ import {
 } from './arranger.js';
 import { disposeLayer } from './audio.js';
 import { commandRegistry } from './commands/index.js';
+import { createGeneratorContext } from './generators/context.js';
+import { operatorRegistry } from './generators/operators.js';
+import type {
+  CreateGeneratorSessionOptions,
+  GeneratorCommitMode,
+  GeneratorSession,
+} from './generators/session.js';
+import {
+  commitGeneratorResult,
+  computeContextRevision,
+  createGeneratorSession,
+  declaredDependencies,
+  evaluateSession,
+  isContextRevisionStale,
+  rerollSession,
+  setSessionBounds,
+  setSessionCommitMode,
+  setSessionRecipe,
+  setVariationLocks,
+  stepVariationHistory,
+} from './generators/session.js';
+import type { GeneratorBounds, GeneratorRecipe, VariationLocks } from './generators/types.js';
 import { CommandHistory, isContiguous } from './history.js';
 import {
   createDefaultLayer,
@@ -270,6 +292,145 @@ export function createStore() {
     chordTrack,
     activeLayerId,
   }));
+
+  // ── Generators (generators.md §4.6-§4.7, §6, §12) ──────────────────────
+  // Application-session state, not document state: a GeneratorSession never
+  // enters DocumentSnapshot/history until Apply converts its result into
+  // ordinary notes through the same whole-document mutation path every other
+  // command uses (applyCommandResult below).
+  let _generatorSession: GeneratorSession | null = $state(null);
+
+  function generatorContextFor(targetLayerId: string) {
+    return createGeneratorContext(
+      commandContext,
+      notes.filter((n) => n.layerId === targetLayerId),
+      scaleTrack,
+      timeSignatureTrack,
+    );
+  }
+
+  const generatorContextRevision = $derived.by(() =>
+    _generatorSession
+      ? computeContextRevision(generatorContextFor(_generatorSession.targetLayerId))
+      : null,
+  );
+
+  /**
+   * Overlays live staleness onto the stored session without mutating it
+   * directly (generators.md §6.2: a declared context-dependency mismatch
+   * marks the session stale without silently recomputing) — same
+   * derived-view pattern as selectionContext/commandContext above.
+   */
+  const generatorSessionView = $derived.by((): GeneratorSession | null => {
+    const session = _generatorSession;
+    if (!session || session.status === 'error' || !generatorContextRevision) return session;
+    const stale = isContextRevisionStale(
+      declaredDependencies(session.recipe, operatorRegistry),
+      session.evaluatedContextRevision,
+      generatorContextRevision,
+    );
+    const nextStatus = stale ? 'stale' : 'ready';
+    return session.status === nextStatus ? session : { ...session, status: nextStatus };
+  });
+
+  /** The session's current preview notes, gated on the target layer's visibility (generators.md §6.3). */
+  const visibleGeneratorPreviewNotes = $derived.by(() => {
+    const session = generatorSessionView;
+    if (!session?.result) return [];
+    return layerFor(session.targetLayerId)?.visible ? session.result.notes : [];
+  });
+
+  /**
+   * store.notes plus the active session's live preview, converted to
+   * playback-shaped Notes with the session's targetLayerId — fed to the
+   * audio engine only (Toolbar's startPlayback), never to `notes` itself, so
+   * preview output stays out of committed document state until Apply.
+   */
+  const notesWithGeneratorPreview = $derived.by((): Note[] => {
+    const session = generatorSessionView;
+    const drafts = visibleGeneratorPreviewNotes;
+    if (!session || drafts.length === 0) return notes;
+    return [
+      ...notes,
+      ...drafts.map((draft): Note => ({
+        id: draft.eventKey,
+        midiNote: draft.midiNote,
+        startBeat: draft.startBeat,
+        durationBeats: draft.durationBeats,
+        velocity: draft.velocity,
+        layerId: session.targetLayerId,
+      })),
+    ];
+  });
+
+  function evaluateGeneratorSession(session: GeneratorSession): GeneratorSession {
+    const ctx = generatorContextFor(session.targetLayerId);
+    return evaluateSession(ctx, session, computeContextRevision(ctx), operatorRegistry).session;
+  }
+
+  function startGeneratorSession(options: CreateGeneratorSessionOptions) {
+    _generatorSession = evaluateGeneratorSession(createGeneratorSession(options));
+  }
+
+  /** Recompute (generators.md §6.2) — explicitly re-evaluates against the current context, whether or not the session is currently marked stale. */
+  function recomputeGeneratorSession() {
+    if (!_generatorSession) return;
+    _generatorSession = evaluateGeneratorSession(_generatorSession);
+  }
+
+  function rerollGeneratorSession(randomizedParams?: Record<string, unknown>) {
+    if (!_generatorSession) return;
+    _generatorSession = evaluateGeneratorSession(
+      rerollSession(_generatorSession, randomizedParams),
+    );
+  }
+
+  function stepGeneratorVariation(direction: 'previous' | 'next') {
+    if (!_generatorSession) return;
+    _generatorSession = evaluateGeneratorSession(
+      stepVariationHistory(_generatorSession, direction),
+    );
+  }
+
+  function updateGeneratorBounds(bounds: GeneratorBounds) {
+    if (!_generatorSession) return;
+    _generatorSession = evaluateGeneratorSession(setSessionBounds(_generatorSession, bounds));
+  }
+
+  function updateGeneratorRecipe(recipe: GeneratorRecipe) {
+    if (!_generatorSession) return;
+    _generatorSession = evaluateGeneratorSession(setSessionRecipe(_generatorSession, recipe));
+  }
+
+  /** Doesn't affect the current preview, so no re-evaluation is needed (generators.md §4.6). */
+  function setGeneratorCommitMode(mode: GeneratorCommitMode) {
+    if (!_generatorSession) return;
+    _generatorSession = setSessionCommitMode(_generatorSession, mode);
+  }
+
+  /** Locks only gate future rerolls, so no re-evaluation is needed (generators.md §4.5, §10). */
+  function setGeneratorLocks(locks: Partial<VariationLocks>) {
+    if (!_generatorSession) return;
+    _generatorSession = setVariationLocks(_generatorSession, locks);
+  }
+
+  /**
+   * Apply (generators.md §4.6, §6.1 step 5): commits the session's current
+   * result as ordinary notes on the target layer through the same
+   * applyCommandResult path every other command uses — one document-history
+   * entry, no generator-specific mutation/history logic — then closes the
+   * session.
+   */
+  function applyGeneratorSession() {
+    if (!_generatorSession) return;
+    applyCommandResult(commitGeneratorResult(notes, _generatorSession));
+    _generatorSession = null;
+  }
+
+  /** Cancel (generators.md §4.6, §6.1 step 6): closes the session with no document mutation. */
+  function cancelGeneratorSession() {
+    _generatorSession = null;
+  }
 
   // ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -918,6 +1079,20 @@ export function createStore() {
       return commandContext;
     },
 
+    get generatorSession() {
+      return generatorSessionView;
+    },
+
+    /** Preview notes (gated on the target layer's visibility) for grid rendering (generators.md §6.3). */
+    get generatorPreviewNotes() {
+      return visibleGeneratorPreviewNotes;
+    },
+
+    /** store.notes plus the active session's live preview — pass to the audio engine's getNotes, not store.notes. */
+    get notesWithGeneratorPreview() {
+      return notesWithGeneratorPreview;
+    },
+
     /** Reactive-mirrored view of history state for UI bindings. */
     get history() {
       return {
@@ -960,6 +1135,16 @@ export function createStore() {
     redo,
     applyCommandResult,
     executeCommand,
+    startGeneratorSession,
+    recomputeGeneratorSession,
+    rerollGeneratorSession,
+    stepGeneratorVariation,
+    updateGeneratorBounds,
+    updateGeneratorRecipe,
+    setGeneratorCommitMode,
+    setGeneratorLocks,
+    applyGeneratorSession,
+    cancelGeneratorSession,
     upsertTimeSignatureEvent: timeSignatureTrackMutators.upsert,
     removeTimeSignatureEvent,
     moveTimeSignatureEvent,

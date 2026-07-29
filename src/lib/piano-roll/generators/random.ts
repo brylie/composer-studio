@@ -7,8 +7,10 @@ export { createSeededRandom } from '../random.js';
 /**
  * FNV-1a over a stable string key. Not cryptographic — just a cheap way to
  * spread (seed, generation, ...keyParts) into a well-mixed 32-bit sub-seed.
+ * Exported for reuse as session.ts's context-revision fingerprint (generators.md
+ * §4.7, §12.2) — same "cheap deterministic 32-bit hash" need, different input shape.
  */
-function hashToUint32(input: string): number {
+export function hashToUint32(input: string): number {
   let hash = 2166136261;
   for (let i = 0; i < input.length; i++) {
     hash ^= input.charCodeAt(i);
