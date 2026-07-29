@@ -182,15 +182,22 @@ export function createStore() {
   // (tracks.md#effect-on-the-piano-roll-grid) — computed per bar from
   // whichever TimeSignatureEvent is active at that bar's start, so a
   // mid-timeline meter change changes the grouping from that bar onward.
+  // Passes each bar's real end (the next bar-start, or totalBeats for the
+  // last one) so a bar truncated by a mid-bar signature change clips its
+  // ticks there instead of computing the old signature's full nominal bar
+  // length — see beatGroupLines' barEnd doc comment for why an unclipped
+  // truncated bar produces beat values that collide with the next bar's own
+  // ticks (a duplicate-key crash in the note grid's keyed `{#each}`).
   const beatGroupLinePositions = $derived(
-    barBeatPositions.flatMap((barStart) => {
+    barBeatPositions.flatMap((barStart, i) => {
+      const barEnd = barBeatPositions[i + 1] ?? totalBeats;
       const sig = activeEventAt(timeSignatureTrack, barStart) ?? {
         id: '',
         beat: 0,
         numerator: 4,
         denominator: 4,
       };
-      return beatGroupLines(sig, barStart);
+      return beatGroupLines(sig, barStart, barEnd);
     }),
   );
 

@@ -1047,6 +1047,21 @@ describe('createStore — time signature track', () => {
     expect(store.beatGroupLines.slice(0, 3)).toEqual([1, 2, 3]);
   });
 
+  it('regression: a mid-bar time signature change never produces duplicate beatGroupLines values', () => {
+    // Reproduces the crash a mid-bar marker used to trigger: adding a 3/4
+    // marker at beat 1 truncates the preceding 4/4 bar to [0, 1) per
+    // barBeats, but beatGroupLinePositions used to compute that truncated
+    // bar's ticks as if it were still a full 4-beat bar — producing beats
+    // (2, 3) that collided with the new bar's own ticks. Duplicate values
+    // fed into the note grid's keyed `{#each}` crash Svelte
+    // (each_key_duplicate); a plain Set-size check catches the regression
+    // without needing a rendered component.
+    const store = createStore();
+    store.upsertTimeSignatureEvent({ id: 'm1', beat: 1, numerator: 3, denominator: 4 });
+    const ticks = store.beatGroupLines;
+    expect(new Set(ticks).size).toBe(ticks.length);
+  });
+
   it('upsertTimeSignatureEvent adds a new marker and records history', () => {
     const store = createStore();
     store.upsertTimeSignatureEvent({ id: 'm1', beat: 8, numerator: 3, denominator: 4 });

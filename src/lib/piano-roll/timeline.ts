@@ -194,14 +194,29 @@ export function barBeats(track: TimeSignatureTrack, totalBeats: number): number[
  * asymmetric groupings (6/8's 3+3, a v2 7/8's 3+2+2, ...) without this
  * function needing a second code path. No line is produced at the bar's own
  * end — barBeats already draws that boundary.
+ *
+ * `barEnd` clips ticks to where the *next* bar actually starts, which can be
+ * earlier than this signature's own nominal bar length: a time-signature
+ * change placed mid-bar (barBeats already truncates the preceding bar at
+ * that point) would otherwise still compute the old signature's full-length
+ * ticks, some of which land past the truncated bar's real end and collide
+ * numerically with the next bar's own ticks — two bars' worth of identical
+ * beat values reaching a single keyed `{#each}` in the note grid, which
+ * Svelte rejects as a duplicate key. Defaults to `Infinity` (no clipping)
+ * so an isolated single-bar call is unaffected.
  */
-export function beatGroupLines(sig: TimeSignatureEvent, barStart: number): number[] {
+export function beatGroupLines(
+  sig: TimeSignatureEvent,
+  barStart: number,
+  barEnd = Infinity,
+): number[] {
   const unit = 4 / sig.denominator;
   const groups = sig.groups ?? Array<number>(sig.numerator).fill(1);
   const lines: number[] = [];
   let beat = barStart;
   for (const groupSize of groups.slice(0, -1)) {
     beat += groupSize * unit;
+    if (beat >= barEnd) break;
     lines.push(beat);
   }
   return lines;

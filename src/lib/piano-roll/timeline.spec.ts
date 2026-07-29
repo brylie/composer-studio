@@ -193,4 +193,35 @@ describe('beatGroupLines', () => {
     const lines = beatGroupLines(sig, 0);
     expect(lines.every((beat) => beat < 3)).toBe(true);
   });
+
+  it("clips ticks to an explicit barEnd shorter than the signature's own nominal bar length", () => {
+    // A 4/4 bar truncated to just 1 beat (e.g. a new signature placed at
+    // beat 1, mid-bar) must not still compute the untruncated 1/2/3 ticks —
+    // none of them fit inside the actual [0, 1) bar.
+    const sig: TimeSignatureEvent = { id: 'a', beat: 0, numerator: 4, denominator: 4 };
+    expect(beatGroupLines(sig, 0, 1)).toEqual([]);
+  });
+
+  it("regression: a mid-bar signature change does not produce ticks that collide with the next bar's own ticks", () => {
+    // This is exactly tracks.md's motivating scenario reproduced as a unit
+    // test: a 3/4 marker placed at beat 1 truncates the preceding 4/4 bar
+    // to [0, 1). Without barEnd clipping, the truncated bar's unclipped
+    // ticks (1, 2, 3) collide with the next bar's own ticks (2, 3) — two
+    // different bars producing identical beat values, which crashes the
+    // note grid's keyed `{#each}` (Svelte's each_key_duplicate) once fed
+    // into a single flat list, as store.svelte.ts's beatGroupLinePositions
+    // does.
+    const barZeroTicks = beatGroupLines(
+      { id: 'a', beat: 0, numerator: 4, denominator: 4 },
+      0,
+      1, // next bar starts at beat 1
+    );
+    const barOneTicks = beatGroupLines(
+      { id: 'b', beat: 1, numerator: 3, denominator: 4 },
+      1,
+      4, // next bar starts at beat 4
+    );
+    const allTicks = [...barZeroTicks, ...barOneTicks];
+    expect(new Set(allTicks).size).toBe(allTicks.length);
+  });
 });
