@@ -40,20 +40,28 @@ function nodeVariation(base: VariationState, nodeId: string): VariationState {
  * produced against its own descriptor (generators.md §5 evaluator step 6):
  * undeclared ports, array-vs-single shape against `multiple`, plan kind, and
  * required-output presence. A port that fails any check is dropped instead
- * of being stored for downstream nodes — e.g. an operator declaring a
- * 'notes' output that accidentally returns a HarmonyPlan must not reach a
- * downstream node that calls `plan.notes.map(...)`. Each surviving plan's
- * own bounds and diagnostics are also folded in, so operator-level
- * diagnostics aren't silently dropped just because they didn't happen to be
- * on the recipe's final output.
+ * of being stored for downstream nodes — e.g. an
+ * operator declaring a 'notes' output that accidentally returns a
+ * HarmonyPlan must not reach a downstream node that calls
+ * `plan.notes.map(...)`. A port already flagged by one of those checks is
+ * excluded from the required-output pass below it, so a single bad value
+ * doesn't also get reported as "missing" on top of its specific diagnostic.
+ * Each surviving plan's own bounds and diagnostics are also folded in — the
+ * latter deduped against `seenPlans`, since a bypassed (disabled) node
+ * passes its input plan through by reference, and without dedup the same
+ * plan's embedded diagnostics would be re-appended once per bypass hop it
+ * flows through — so operator-level diagnostics aren't silently dropped
+ * just because they didn't happen to be on the recipe's final output.
  */
 function validateOperatorOutputs(
   node: GeneratorNodeInstance,
   operator: GeneratorOperatorDescriptor,
   outputs: Record<string, MusicPlan | MusicPlan[]>,
+  seenPlans: Set<MusicPlan>,
 ): { outputs: Record<string, MusicPlan | MusicPlan[]>; diagnostics: GeneratorDiagnostic[] } {
   const validated: Record<string, MusicPlan | MusicPlan[]> = {};
   const diagnostics: GeneratorDiagnostic[] = [];
+  const failedPorts = new Set<string>();
 
   for (const [portKey, value] of Object.entries(outputs)) {
     if (!Object.hasOwn(operator.outputs, portKey)) {
@@ -77,6 +85,7 @@ function validateOperatorOutputs(
         nodeId: node.id,
         port: portKey,
       });
+      failedPorts.add(portKey);
       continue;
     }
 
@@ -90,6 +99,7 @@ function validateOperatorOutputs(
         nodeId: node.id,
         port: portKey,
       });
+      failedPorts.add(portKey);
       continue;
     }
 
@@ -101,13 +111,16 @@ function validateOperatorOutputs(
           port: portKey,
         })),
       );
-      diagnostics.push(...plan.diagnostics);
+      if (!seenPlans.has(plan)) {
+        seenPlans.add(plan);
+        diagnostics.push(...plan.diagnostics);
+      }
     }
     validated[portKey] = value;
   }
 
   for (const [portKey, port] of Object.entries(operator.outputs)) {
-    if (!port.optional && !Object.hasOwn(validated, portKey)) {
+    if (!port.optional && !Object.hasOwn(validated, portKey) && !failedPorts.has(portKey)) {
       diagnostics.push({
         level: 'error',
         code: 'missing-required-output',
@@ -195,6 +208,7 @@ export function evaluateGeneratorRecipe(
   const nodesById = new Map(recipe.nodes.map((n) => [n.id, n]));
   const outputsByNode = new Map<string, Record<string, MusicPlan | MusicPlan[]>>();
   const trace: { nodeId: string; outputs: Record<string, MusicPlan | MusicPlan[]> }[] = [];
+  const seenPlans = new Set<MusicPlan>();
 
   for (const nodeId of order) {
     const node = nodesById.get(nodeId);
@@ -233,7 +247,7 @@ export function evaluateGeneratorRecipe(
       });
     }
 
-    const validatedOutputs = validateOperatorOutputs(node, operator, outputs);
+    const validatedOutputs = validateOperatorOutputs(node, operator, outputs, seenPlans);
     diagnostics.push(...validatedOutputs.diagnostics);
     outputs = validatedOutputs.outputs;
 
