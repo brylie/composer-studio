@@ -17,7 +17,8 @@
   import PianoKeys from './PianoKeys.svelte';
   import ScaleEventEditor from './ScaleEventEditor.svelte';
   import SynthPanel from './SynthPanel.svelte';
-  import type { ChordEvent, LabelEvent, ScaleEvent } from './timeline.js';
+  import TimeSignatureEventEditor from './TimeSignatureEventEditor.svelte';
+  import type { ChordEvent, LabelEvent, ScaleEvent, TimeSignatureEvent } from './timeline.js';
   import Toolbar from './Toolbar.svelte';
   import TopBar from './TopBar.svelte';
   import { MAX_MIDI, NOTE_NAMES } from './types.js';
@@ -36,6 +37,7 @@
   // (arranger-lane-editor.svelte.ts) instead of reusing EventTrackLane.
   const RULER_HEIGHT = 24;
   const ARRANGER_LANE_HEIGHT = 28;
+  const TIME_SIGNATURE_LANE_HEIGHT = 26;
   const SCALE_LANE_HEIGHT = 26;
   const CHORD_LANE_HEIGHT = 26;
   const LABELS_LANE_HEIGHT = 26;
@@ -46,6 +48,19 @@
     },
     (id) => {
       store.removeArrangerSection(id);
+    },
+  );
+
+  const timeSignatureLane = createLaneEditor<TimeSignatureEvent>(
+    () => store.timeSignatureTrack,
+    (event) => {
+      store.upsertTimeSignatureEvent(event);
+    },
+    (id) => {
+      store.removeTimeSignatureEvent(id);
+    },
+    (id, beat) => {
+      store.moveTimeSignatureEvent(id, beat);
     },
   );
 
@@ -185,7 +200,7 @@
       <div class="scroll-area" use:scrollAreaAction={autoScrollX}>
         <div
           class="scroll-content"
-          style="width: max-content; min-height: 100%; grid-template-rows: {RULER_HEIGHT}px {ARRANGER_LANE_HEIGHT}px {SCALE_LANE_HEIGHT}px {CHORD_LANE_HEIGHT}px {LABELS_LANE_HEIGHT}px auto;"
+          style="width: max-content; min-height: 100%; grid-template-rows: {RULER_HEIGHT}px {ARRANGER_LANE_HEIGHT}px {TIME_SIGNATURE_LANE_HEIGHT}px {SCALE_LANE_HEIGHT}px {CHORD_LANE_HEIGHT}px {LABELS_LANE_HEIGHT}px auto;"
         >
           <!-- Top-left corner (aligned with ruler) -->
           <div class="corner-spacer" style="position: sticky; left: 0; z-index: 30;"></div>
@@ -226,6 +241,29 @@
             }}
           />
 
+          <!-- Time signature lane (tracks.md#time-signature-track-specified) —
+               shares the tempo/time-signature lane row with the (not yet
+               built) tempo track, per the fixed stacking order: arranger,
+               then tempo/time-signature, then scale, then chord, then
+               labels. -->
+          <EventTrackLane
+            label="Time Sig"
+            events={store.timeSignatureTrack}
+            pixelsPerBeat={store.pixelsPerBeat}
+            totalBeats={store.totalBeats}
+            snapBeats={store.snapBeats}
+            row={3}
+            stickyTop={RULER_HEIGHT + ARRANGER_LANE_HEIGHT}
+            height={TIME_SIGNATURE_LANE_HEIGHT}
+            onAddAt={timeSignatureLane.openAt}
+            onSelect={timeSignatureLane.openFor}
+            onMove={timeSignatureLane.move}
+          >
+            {#snippet marker(event: TimeSignatureEvent)}
+              {event.numerator}/{event.denominator}
+            {/snippet}
+          </EventTrackLane>
+
           <!-- Scale lane (tracks.md) — synced scroll/zoom with the grid below via
                the same shared timeline grid, sticky just under the ruler. -->
           <EventTrackLane
@@ -234,8 +272,8 @@
             pixelsPerBeat={store.pixelsPerBeat}
             totalBeats={store.totalBeats}
             snapBeats={store.snapBeats}
-            row={3}
-            stickyTop={RULER_HEIGHT + ARRANGER_LANE_HEIGHT}
+            row={4}
+            stickyTop={RULER_HEIGHT + ARRANGER_LANE_HEIGHT + TIME_SIGNATURE_LANE_HEIGHT}
             height={SCALE_LANE_HEIGHT}
             onAddAt={scaleLane.openAt}
             onSelect={scaleLane.openFor}
@@ -248,15 +286,18 @@
 
           <!-- Chord lane (tracks.md#chord-track-placeholder) — same lane
                component, one row below the scale lane per the fixed stacking
-               order (arranger, scale, then chord, then labels). -->
+               order (arranger, time signature, scale, then chord, then labels). -->
           <EventTrackLane
             label="Chord"
             events={store.chordTrack}
             pixelsPerBeat={store.pixelsPerBeat}
             totalBeats={store.totalBeats}
             snapBeats={store.snapBeats}
-            row={4}
-            stickyTop={RULER_HEIGHT + ARRANGER_LANE_HEIGHT + SCALE_LANE_HEIGHT}
+            row={5}
+            stickyTop={RULER_HEIGHT +
+              ARRANGER_LANE_HEIGHT +
+              TIME_SIGNATURE_LANE_HEIGHT +
+              SCALE_LANE_HEIGHT}
             height={CHORD_LANE_HEIGHT}
             onAddAt={chordLane.openAt}
             onSelect={chordLane.openFor}
@@ -275,8 +316,12 @@
             pixelsPerBeat={store.pixelsPerBeat}
             totalBeats={store.totalBeats}
             snapBeats={store.snapBeats}
-            row={5}
-            stickyTop={RULER_HEIGHT + ARRANGER_LANE_HEIGHT + SCALE_LANE_HEIGHT + CHORD_LANE_HEIGHT}
+            row={6}
+            stickyTop={RULER_HEIGHT +
+              ARRANGER_LANE_HEIGHT +
+              TIME_SIGNATURE_LANE_HEIGHT +
+              SCALE_LANE_HEIGHT +
+              CHORD_LANE_HEIGHT}
             height={LABELS_LANE_HEIGHT}
             onAddAt={labelLane.openAt}
             onSelect={labelLane.openFor}
@@ -358,6 +403,21 @@
         section={arrangerLane.target}
         onSave={arrangerLane.save}
         onDelete={arrangerLane.delete}
+      />
+    {/if}
+  </OverlayShell>
+
+  <OverlayShell
+    open={timeSignatureLane.target !== null}
+    title="Time signature marker"
+    onclose={timeSignatureLane.close}
+  >
+    {#if timeSignatureLane.target}
+      <TimeSignatureEventEditor
+        beat={timeSignatureLane.target.beat}
+        existing={timeSignatureLane.target.existing}
+        onSave={timeSignatureLane.save}
+        onDelete={timeSignatureLane.delete}
       />
     {/if}
   </OverlayShell>
@@ -448,11 +508,12 @@
     display: grid;
     /* col 1: piano key width (sticky), col 2: rest */
     grid-template-columns: 64px 1fr;
-    /* row 1: ruler, row 2: arranger lane, row 3: scale lane, row 4: chord
-       lane, row 5: labels lane (tracks.md's fixed stacking order), row 6:
-       piano keys + note grid — heights set inline from RULER_HEIGHT/
-       ARRANGER_LANE_HEIGHT/SCALE_LANE_HEIGHT/CHORD_LANE_HEIGHT/
-       LABELS_LANE_HEIGHT to keep this in sync. */
+    /* row 1: ruler, row 2: arranger lane, row 3: time signature lane, row 4:
+       scale lane, row 5: chord lane, row 6: labels lane (tracks.md's fixed
+       stacking order), row 7: piano keys + note grid — heights set inline
+       from RULER_HEIGHT/ARRANGER_LANE_HEIGHT/TIME_SIGNATURE_LANE_HEIGHT/
+       SCALE_LANE_HEIGHT/CHORD_LANE_HEIGHT/LABELS_LANE_HEIGHT to keep this in
+       sync. */
   }
 
   /* ── Corner spacer ── */
@@ -490,7 +551,7 @@
   /* ── Grid row: piano keys + note grid ── */
   .grid-row {
     grid-column: 1 / -1;
-    grid-row: 6;
+    grid-row: 7;
     display: flex;
     align-items: flex-start;
   }

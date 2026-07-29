@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ScaleEvent, ScaleTrack, TimeSignatureEvent } from './timeline.js';
-import { activeEventAt, barBeats, eventSegments, removeEvent, upsertEvent } from './timeline.js';
+import {
+  activeEventAt,
+  barBeats,
+  beatGroupLines,
+  eventSegments,
+  removeEvent,
+  upsertEvent,
+} from './timeline.js';
 
 function scaleEvent(id: string, beat: number, root = 0, mode = 'major'): ScaleEvent {
   return { id, beat, root, mode };
@@ -143,5 +150,47 @@ describe('barBeats', () => {
   it('handles 6/8 (beatsPerBar = 3)', () => {
     const track: TimeSignatureEvent[] = [{ id: 'a', beat: 0, numerator: 6, denominator: 8 }];
     expect(barBeats(track, 9)).toEqual([0, 3, 6]);
+  });
+});
+
+// ── beatGroupLines ───────────────────────────────────────────────────────────
+
+describe('beatGroupLines', () => {
+  it('v1 fallback (no groups): 4/4 gets 3 evenly-spaced internal quarter-beat ticks', () => {
+    const sig: TimeSignatureEvent = { id: 'a', beat: 0, numerator: 4, denominator: 4 };
+    expect(beatGroupLines(sig, 0)).toEqual([1, 2, 3]);
+  });
+
+  it('v1 fallback: 3/4 gets 2 internal ticks', () => {
+    const sig: TimeSignatureEvent = { id: 'a', beat: 0, numerator: 3, denominator: 4 };
+    expect(beatGroupLines(sig, 0)).toEqual([1, 2]);
+  });
+
+  it('offsets ticks by barStart for a bar that does not start at beat 0', () => {
+    const sig: TimeSignatureEvent = { id: 'a', beat: 8, numerator: 4, denominator: 4 };
+    expect(beatGroupLines(sig, 8)).toEqual([9, 10, 11]);
+  });
+
+  it('produces no ticks for a single-unit numerator (nothing to subdivide)', () => {
+    const sig: TimeSignatureEvent = { id: 'a', beat: 0, numerator: 1, denominator: 4 };
+    expect(beatGroupLines(sig, 0)).toEqual([]);
+  });
+
+  it('honors an explicit v2 additive grouping instead of the numerator fallback', () => {
+    const sig: TimeSignatureEvent = {
+      id: 'a',
+      beat: 0,
+      numerator: 7,
+      denominator: 8,
+      groups: [3, 2, 2],
+    };
+    // unit = 4/8 = 0.5 beat; groups [3,2,2] -> ticks after 3 and 5 eighths.
+    expect(beatGroupLines(sig, 0)).toEqual([1.5, 2.5]);
+  });
+
+  it('never produces a line at the bar end — barBeats already draws that boundary', () => {
+    const sig: TimeSignatureEvent = { id: 'a', beat: 0, numerator: 6, denominator: 8 };
+    const lines = beatGroupLines(sig, 0);
+    expect(lines.every((beat) => beat < 3)).toBe(true);
   });
 });

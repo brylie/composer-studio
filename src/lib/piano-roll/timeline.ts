@@ -113,6 +113,13 @@ export type TempoTrack = EventTrack<TempoEvent>;
 export interface TimeSignatureEvent extends TimelineEvent {
   numerator: number;
   denominator: number;
+  /**
+   * Additive beat grouping, e.g. [3, 2, 2] for 7/8 grouped 3+2+2
+   * (tracks.md#v2-arbitrary--additive-signatures). Optional and
+   * display-only — beatsPerBar/barBeats never read it, only
+   * beatGroupLines below does. Not set by the v1 preset picker.
+   */
+  groups?: number[];
 }
 export type TimeSignatureTrack = EventTrack<TimeSignatureEvent>;
 
@@ -175,4 +182,27 @@ export function barBeats(track: TimeSignatureTrack, totalBeats: number): number[
     }
   }
   return bars;
+}
+
+/**
+ * Beat positions of a single bar's internal beat-grouping ticks
+ * (tracks.md#effect-on-the-piano-roll-grid) — a tier finer than bar lines,
+ * marking where the bar's internal pulses fall. `groups` absent (the v1
+ * default — the preset picker never sets it) falls back to one group per
+ * numerator unit, reproducing today's implicit "beat within the bar"
+ * markers; a future v2 additive-grouping UI supplies `groups` directly for
+ * asymmetric groupings (6/8's 3+3, a v2 7/8's 3+2+2, ...) without this
+ * function needing a second code path. No line is produced at the bar's own
+ * end — barBeats already draws that boundary.
+ */
+export function beatGroupLines(sig: TimeSignatureEvent, barStart: number): number[] {
+  const unit = 4 / sig.denominator;
+  const groups = sig.groups ?? Array<number>(sig.numerator).fill(1);
+  const lines: number[] = [];
+  let beat = barStart;
+  for (const groupSize of groups.slice(0, -1)) {
+    beat += groupSize * unit;
+    lines.push(beat);
+  }
+  return lines;
 }

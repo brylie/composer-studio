@@ -83,6 +83,12 @@
   // the previous hardcoded "every 4 beats" CSS repeating-gradient.
   const barLineLefts = $derived(store.barBeats.map((beat) => beat * store.pixelsPerBeat));
 
+  // Beat-grouping tick positions (tracks.md#effect-on-the-piano-roll-grid) —
+  // one tier finer than bar lines, marking each bar's internal pulses.
+  const beatGroupLineLefts = $derived(
+    store.beatGroupLines.map((beat) => beat * store.pixelsPerBeat),
+  );
+
   function midiForRow(row: number): number {
     return Math.max(MIN_MIDI, Math.min(MAX_MIDI, MAX_MIDI - row));
   }
@@ -421,6 +427,13 @@
   <!-- Beat/8th/16th subdivision lines via CSS background on overlay -->
   <div class="grid-lines" style="width: {totalWidth}px; height: {totalHeight}px;"></div>
 
+  <!-- Beat-grouping lines (tracks.md) — a third visual tier, lighter than bar
+       lines but distinct from the snap grid; drawn first so bar lines paint
+       over them at coincident positions. -->
+  {#each beatGroupLineLefts as left (left)}
+    <div class="beat-group-line" style="left: {left}px; height: {totalHeight}px;"></div>
+  {/each}
+
   <!-- Bar lines, positioned per the time-signature track (timeline.md) -->
   {#each barLineLefts as left (left)}
     <div class="bar-line" style="left: {left}px; height: {totalHeight}px;"></div>
@@ -521,6 +534,16 @@
     top: 0;
     width: 1px;
     background: #3a3a62;
+    pointer-events: none;
+  }
+
+  /* ── Beat-grouping lines — lighter than bar lines, a third tier distinct
+     from the (often much finer) snap grid (tracks.md) ── */
+  .beat-group-line {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    background: #26264a;
     pointer-events: none;
   }
 

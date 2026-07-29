@@ -1,5 +1,5 @@
 import type { ArrangerSection } from './arranger.js';
-import type { ChordEvent, LabelEvent, ScaleEvent } from './timeline.js';
+import type { ChordEvent, LabelEvent, ScaleEvent, TimeSignatureEvent } from './timeline.js';
 
 export interface Note {
   id: string;
@@ -184,6 +184,7 @@ export interface CommandContext extends SelectionContext {
 export interface DocumentSnapshot {
   label: string;
   notes: Note[];
+  timeSignatureEvents: TimeSignatureEvent[];
   scaleEvents: ScaleEvent[];
   chordEvents: ChordEvent[];
   labelEvents: LabelEvent[];
