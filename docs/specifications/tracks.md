@@ -1,12 +1,224 @@
-# Tracks Specification: Scale, Chord, Arranger
+# Tracks Specification: Time Signature, Scale, Chord, Arranger
 
 ## Overview
 
-Cubase-style scale/chord/arranger/labels tracks, built on the generic
-event-track abstraction from [timeline.md](./timeline.md). The scale track is
-specified in full for the initial development pass; chord, arranger, and
-labels tracks are deliberately scoped as placeholders — enough shape to not
-block the scale track's design, not enough detail to pretend they're decided.
+Cubase-style time-signature/scale/chord/arranger/labels tracks, built on the
+generic event-track abstraction from [timeline.md](./timeline.md). The time
+signature and scale tracks are specified in full for the initial development
+pass; chord, arranger, and labels tracks are deliberately scoped as
+placeholders — enough shape to not block the specified tracks' design, not
+enough detail to pretend they're decided.
+
+---
+
+## Time signature track (specified)
+
+### Data model
+
+Builds on `TimeSignatureEvent` from
+[timeline.md](./timeline.md#data-model-additions):
+
+```typescript
+interface TimeSignatureEvent {
+  id: string;
+  beat: number;
+  numerator: number; // beats per bar, counted in the signature's own denominator unit
+  denominator: number; // 1 | 2 | 4 | 8 | 16 | 32 — must be a power of two, see below
+}
+
+type TimeSignatureTrack = TimeSignatureEvent[]; // an EventTrack<TimeSignatureEvent> per timeline.md
+```
+
+`beatsPerBar(sig) = numerator * (4 / denominator)` converts to the canonical
+quarter-note beat unit ([timeline.md](./timeline.md#coordinate-system)).
+Placing an event changes the active time signature from that beat onward,
+resolved via `activeEventAt(timeSignatureTrack, beat)` like every other event
+track — no special-casing versus scale/chord/labels.
+
+### Vocabulary sourced from tonal.js, not hand-rolled
+
+Composer Studio is standardizing on tonal.js as its music-theory framework
+([libraries.md](./libraries.md#tonaljs--adopt-now)) precisely because it
+already covers pitch, chords, scales, keys, and — relevant here — rhythm and
+meter, so this track shouldn't reinvent a parallel vocabulary. tonal's
+[`TimeSignature`](https://tonaljs.github.io/tonal/docs/time/signatures)
+module parses and validates signature strings (`"4/4"`, `"6/8"`, additive
+`"3+2+3/8"`), classifies them (`simple`/`compound`/`regular`/`irregular`/
+`irrational`), and ships `TimeSignature.names()` — a ready-made list of
+commonly-used signatures. The `music-theory` adapter module
+([libraries.md](./libraries.md#recommendation-wrap-it-dont-spray-it)) gains
+two functions:
+
+```typescript
+function commonTimeSignatures(): { numerator: number; denominator: number; label: string }[] {
+  // backed by TimeSignature.names(), filtered to the v1 preset list below
+}
+
+function parseTimeSignature(
+  input: string,
+): { numerator: number; denominator: number; groups?: number[] } | null {
+  // backed by TimeSignature.get(input) — null for anything TimeSignature itself
+  // rejects (denominator not a power of two, malformed string, ...)
+}
+```
+
+This is additive, not a data-model change: `TimeSignatureEvent` keeps its own
+flat `numerator`/`denominator` fields, matching the convention every other
+concrete event follows
+([timeline.md](./timeline.md#data-model-additions)) — tonal is used at the
+_editing UI_ boundary (parsing what the user picks or types) and for the v1
+preset list, not as the stored representation. This mirrors `ChordEvent`:
+tonal supplies the vocabulary and parsing, the event itself stores plain
+fields.
+
+### v1: preset picker, not free-form entry
+
+A fixed set of buttons, not two open numeric inputs — sourced from
+`commonTimeSignatures()`, filtered and ordered to: **4/4, 3/4, 2/4, 2/2, 6/8,
+9/8, 12/8, 5/4, 7/8**. That covers the simple duple/triple/quadruple meters,
+cut time, the common compound meters (6/8, 9/8, 12/8), and the two "odd"
+meters common enough in practice to name explicitly (5/4, 7/8) — without
+opening the door to signatures tonal's own classifier would flag as
+`irrational` or otherwise unusual. Every v1 preset is a plain `simple` or
+`compound` signature `TimeSignature.get()` parses cleanly, so v1 needs no
+input-validation UI at all.
+
+### v2: arbitrary + additive signatures
+
+Free-form entry: numerator as any positive integer, denominator constrained
+to the standard power-of-two set (1, 2, 4, 8, 16, 32) via a `<select>` rather
+than a free number field — real time signatures never use a non-power-of-two
+denominator in practice, and constraining the input this way means a value
+`parseTimeSignature` would reject can never be constructed in the first
+place. This also unlocks additive/irregular meters — 7/8 as 3+2+2 rather
+than an undifferentiated 7, 5/4 as 3+2 — by accepting tonal's `"3+2+2/8"`
+string form directly, parsed via the same `parseTimeSignature`, with the
+resulting `groups` breakdown driving the beat-grouping subdivisions below
+instead of a uniform grouping guessed from the numerator alone. This is v2,
+not v1, because it's only useful once there's a UI for _choosing_ a grouping
+(3+2+2 vs. 2+2+3 vs. 2+3+2 all sum to 7/8) — genuinely new interaction
+design, not just a wider input range.
+
+`TimeSignatureEvent` gains one optional field for this, not a rewrite:
+
+```typescript
+interface TimeSignatureEvent {
+  id: string;
+  beat: number;
+  numerator: number;
+  denominator: number;
+  groups?: number[]; // v2 only — e.g. [3, 2, 2] for 7/8 grouped 3+2+2; sums to numerator
+}
+```
+
+`groups` is optional and display-only — `beatsPerBar`/`barBeats` (bar-length
+math, below) never read it, only the beat-grouping renderer does. A v1
+project with no `groups` on any event round-trips through v2 unchanged:
+`numerator`/`denominator` alone still fully describe the bar.
+
+### Effect on the piano-roll grid
+
+**Bar lines** already exist and need no change: `timeline.ts`'s
+`beatsPerBar`/`barBeats` already walk the time-signature track and replace
+the note grid's previous hardcoded "every 4 beats" assumption
+([timeline.md](./timeline.md#time-signature-is-currently-hardcoded)) —
+`NoteGrid.svelte`'s bar-line rendering already consumes `store.barBeats`.
+What's new under this spec is one tier finer:
+
+**Beat-grouping lines** mark where each bar's internal pulses fall — e.g. 4/4
+gets 3 evenly-spaced internal quarter-beat ticks, 6/8 gets a single internal
+tick at the bar's midpoint (the two dotted-quarter groups: eighth-notes
+1‑2‑3 | 4‑5‑6), and a v2 7/8 grouped 3+2+2 gets ticks after the 3rd and 5th
+eighth rather than evenly-spaced eighths. This is a real, currently-missing
+distinction: today's grid can only show a bar line every _N_ beats and, via
+snap, an _even_ subdivision within it — it cannot visually distinguish 6/8's
+asymmetric 3+3 pulse from a plain run of 6 equal beats, which is exactly the
+information a compound or additive meter needs to read correctly at a
+glance.
+
+```typescript
+function beatGroupLines(sig: TimeSignatureEvent, barStart: number): number[] {
+  const unit = 4 / sig.denominator; // one denominator-unit, in canonical beats
+  const groups = sig.groups ?? Array(sig.numerator).fill(1); // v1 fallback: one group per unit
+  const lines: number[] = [];
+  let beat = barStart;
+  for (const groupSize of groups.slice(0, -1)) {
+    // no line at the bar's own end — barBeats already draws that boundary
+    beat += groupSize * unit;
+    lines.push(beat);
+  }
+  return lines;
+}
+```
+
+v1's fallback (`groups` absent ⇒ one group per numerator unit) reproduces
+today's implicit "beat within the bar" markers exactly — 4/4 shows 3 evenly
+spaced internal ticks — while leaving the function ready for v2's asymmetric
+groupings without a second code path later. Rendered as a third visual tier:
+lighter than bar lines, but distinct from the (often much finer) snap grid —
+`NoteGrid.svelte`'s existing `.bar-line` class gets a sibling
+`.beat-group-line`, not a variant of the snap-grid rendering.
+
+### Cross-cutting: interaction with snap/quantization
+
+Time granularity touches every time-based system, so it's worth being
+explicit about what does _not_ need to change here versus what does:
+
+- **Snap math is already time-signature-agnostic, correctly, and should stay
+  that way.** `snapBeats = 4 / snapDenominator`
+  ([store.svelte.ts](../../src/lib/piano-roll/store.svelte.ts)) is defined
+  relative to the canonical quarter-note beat, not the active signature's
+  denominator — because beats stay canonical regardless of meter
+  ([timeline.md](./timeline.md#coordinate-system)), "snap to an eighth note"
+  means the same absolute duration (0.5 beats) whether the active signature
+  is 4/4, 6/8, or 7/8. Coupling `snapBeats` to
+  `TimeSignatureEvent.denominator` would be a bug, not an improvement: it
+  would silently change what "1/8" means depending on where the playhead
+  sits, which the continuous-beat model
+  ([timeline.md](./timeline.md#continuous-beats-not-a-fixed-step-grid))
+  specifically avoids for every other feature.
+- **What genuinely is time-signature-dependent is the _visual grouping_ of
+  the grid, not the snap resolution** — exactly what the beat-grouping lines
+  above render. A user snapping to eighth notes in 6/8 still gets 0.5-beat
+  increments; what changes is which of those increments reads as a strong
+  pulse (the downbeat of each dotted-quarter group) versus a weak one.
+  Keeping that grouping information out of `snapBeats` and in
+  `beatGroupLines` instead is the resolution to this cross-cutting concern,
+  not a gap still open.
+- **Bar-relative operations** — anything meaning "snap to the start of a
+  bar" or "the Nth beat of the current bar," including any future
+  quantize-to-bar transform ([transformations.md](./transformations.md)) —
+  must resolve via `activeEventAt(timeSignatureTrack, beat)` +
+  `beatsPerBar`, never a hardcoded 4-beat assumption, the same rule
+  `barBeats` already follows.
+- **Polymetric/per-track quantization** (different lanes snapping to
+  different divisions of the beat at once) remains explicitly out of scope,
+  per
+  [timeline.md](./timeline.md#resolution-unlimited-in-storage-a-ui-concern-at-the-snap-grid)'s
+  existing future-work note — nothing here changes that; a variable time
+  signature is an orthogonal concern from a variable per-lane snap
+  denominator.
+
+### Lane and editor
+
+Reuses `EventTrackLane` and `createLaneEditor` exactly as the scale/chord/
+label lanes do (see [Shared lane component](#shared-lane-component)): click
+empty lane space to add at the snapped beat, click a marker to edit, drag to
+move — subject to the same beats-are-unique-per-track replace-on-collision
+rule as every other event track
+([timeline.md](./timeline.md#resolving-the-active-value-at-beat-x)). The
+marker editor (an `OverlayShell` popover, matching the scale/chord/label
+markers) shows the v1 preset buttons; a "Custom…" entry reveals the v2
+numerator/denominator/additive-groups inputs once that milestone is built.
+Shares the tempo/time-signature lane row with the tempo track (specified
+separately, not part of this document), per the stacking order already
+defined in [Shared lane component](#shared-lane-component).
+
+One default `TimeSignatureEvent` at beat 0 (4/4) always exists — the same
+"a project with no further events behaves exactly as today" guarantee as the
+tempo track ([timeline.md](./timeline.md#data-model-additions)); deleting
+the beat-0 marker is not offered, mirroring how a document can't have zero
+tempo.
 
 ---
 
@@ -249,6 +461,9 @@ the ribbon's shared `CommandParamsForm`.
 
 ## Future Work
 
+- v2 time-signature UI: free-form numerator/denominator entry plus additive
+  grouping (`groups`) input for irregular meters (7/8 as 3+2+2 vs. 2+2+3,
+  ...) — see [Time signature track](#v2-arbitrary--additive-signatures)
 - Finalize the `mode` vocabulary for `ScaleEvent` (named modes vs. arbitrary
   interval sets vs. both)
 - Chord quality vocabulary (the `INTERVALS` table `pitchClassesForChord`

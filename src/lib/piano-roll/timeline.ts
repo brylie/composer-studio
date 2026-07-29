@@ -113,6 +113,13 @@ export type TempoTrack = EventTrack<TempoEvent>;
 export interface TimeSignatureEvent extends TimelineEvent {
   numerator: number;
   denominator: number;
+  /**
+   * Additive beat grouping, e.g. [3, 2, 2] for 7/8 grouped 3+2+2
+   * (tracks.md#v2-arbitrary--additive-signatures). Optional and
+   * display-only — beatsPerBar/barBeats never read it, only
+   * beatGroupLines below does. Not set by the v1 preset picker.
+   */
+  groups?: number[];
 }
 export type TimeSignatureTrack = EventTrack<TimeSignatureEvent>;
 
@@ -175,4 +182,42 @@ export function barBeats(track: TimeSignatureTrack, totalBeats: number): number[
     }
   }
   return bars;
+}
+
+/**
+ * Beat positions of a single bar's internal beat-grouping ticks
+ * (tracks.md#effect-on-the-piano-roll-grid) — a tier finer than bar lines,
+ * marking where the bar's internal pulses fall. `groups` absent (the v1
+ * default — the preset picker never sets it) falls back to one group per
+ * numerator unit, reproducing today's implicit "beat within the bar"
+ * markers; a future v2 additive-grouping UI supplies `groups` directly for
+ * asymmetric groupings (6/8's 3+3, a v2 7/8's 3+2+2, ...) without this
+ * function needing a second code path. No line is produced at the bar's own
+ * end — barBeats already draws that boundary.
+ *
+ * `barEnd` clips ticks to where the *next* bar actually starts, which can be
+ * earlier than this signature's own nominal bar length: a time-signature
+ * change placed mid-bar (barBeats already truncates the preceding bar at
+ * that point) would otherwise still compute the old signature's full-length
+ * ticks, some of which land past the truncated bar's real end and collide
+ * numerically with the next bar's own ticks — two bars' worth of identical
+ * beat values reaching a single keyed `{#each}` in the note grid, which
+ * Svelte rejects as a duplicate key. Defaults to `Infinity` (no clipping)
+ * so an isolated single-bar call is unaffected.
+ */
+export function beatGroupLines(
+  sig: TimeSignatureEvent,
+  barStart: number,
+  barEnd = Infinity,
+): number[] {
+  const unit = 4 / sig.denominator;
+  const groups = sig.groups ?? Array<number>(sig.numerator).fill(1);
+  const lines: number[] = [];
+  let beat = barStart;
+  for (const groupSize of groups.slice(0, -1)) {
+    beat += groupSize * unit;
+    if (beat >= barEnd) break;
+    lines.push(beat);
+  }
+  return lines;
 }

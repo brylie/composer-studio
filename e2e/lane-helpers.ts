@@ -14,10 +14,14 @@ export async function requireBoundingBox(locator: Locator) {
 /**
  * Scopes to a single lane's `.lane-track` element by its accessible name
  * (`"{label} track: ..."`, set by EventTrackLane.svelte/ArrangerLane.svelte)
- * — all four lanes (Arranger/Scale/Chord/Labels) share the `.lane-track`
- * class, so an unscoped `page.locator('.lane-track')` is ambiguous
- * (Playwright strict mode) once more than one lane exists on the page.
+ * — all five lanes (Arranger/Time Sig/Scale/Chord/Labels) share the
+ * `.lane-track` class, so an unscoped `page.locator('.lane-track')` is
+ * ambiguous (Playwright strict mode) once more than one lane exists on the
+ * page.
  */
-export function laneTrack(page: Page, label: 'Arranger' | 'Scale' | 'Chord' | 'Labels'): Locator {
+export function laneTrack(
+  page: Page,
+  label: 'Arranger' | 'Time Sig' | 'Scale' | 'Chord' | 'Labels',
+): Locator {
   return page.getByRole('group', { name: new RegExp(`^${label} track:`) });
 }

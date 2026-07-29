@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  commonTimeSignatures,
+  parseTimeSignature,
   pitchClassesForChord,
   pitchClassesForScale,
   pitchClassesForScaleEvent,
@@ -156,5 +158,51 @@ describe('voiceChord', () => {
     const voicing = voiceChord(new Set([0]), { min: 3, max: 5 }, 2, [59, 61]);
     expect(new Set(voicing).size).toBe(voicing.length);
     expect(voicing).toEqual([60, 72]);
+  });
+});
+
+// ── Time signatures (tracks.md#time-signature-track-specified) ─────────────
+
+describe('commonTimeSignatures', () => {
+  it('returns the v1 preset list, filtered and ordered per tracks.md', () => {
+    expect(commonTimeSignatures()).toEqual([
+      { numerator: 4, denominator: 4, label: '4/4' },
+      { numerator: 3, denominator: 4, label: '3/4' },
+      { numerator: 2, denominator: 4, label: '2/4' },
+      { numerator: 2, denominator: 2, label: '2/2' },
+      { numerator: 6, denominator: 8, label: '6/8' },
+      { numerator: 9, denominator: 8, label: '9/8' },
+      { numerator: 12, denominator: 8, label: '12/8' },
+      { numerator: 5, denominator: 4, label: '5/4' },
+      { numerator: 7, denominator: 8, label: '7/8' },
+    ]);
+  });
+});
+
+describe('parseTimeSignature', () => {
+  it('parses simple signatures', () => {
+    expect(parseTimeSignature('3/4')).toEqual({ numerator: 3, denominator: 4 });
+    expect(parseTimeSignature('4/4')).toEqual({ numerator: 4, denominator: 4 });
+  });
+
+  it('parses compound signatures', () => {
+    expect(parseTimeSignature('6/8')).toEqual({ numerator: 6, denominator: 8 });
+  });
+
+  it('parses additive signatures, deriving numerator from the sum of groups', () => {
+    expect(parseTimeSignature('3+2+2/8')).toEqual({
+      numerator: 7,
+      denominator: 8,
+      groups: [3, 2, 2],
+    });
+  });
+
+  it('returns null for a malformed string tonal itself throws on', () => {
+    expect(parseTimeSignature('not a time signature')).toBeNull();
+    expect(parseTimeSignature('')).toBeNull();
+  });
+
+  it('rejects a non-power-of-two denominator', () => {
+    expect(parseTimeSignature('3/5')).toBeNull();
   });
 });

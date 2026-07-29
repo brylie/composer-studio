@@ -30,7 +30,11 @@ Ticks only exist at the MIDI-export boundary.
 
 `NoteGrid.svelte` draws a bar line every 4 beats — i.e. 4/4 is implicit. This
 spec generalises time signature into an event track (below) so a change to 3/4
-partway through a piece is representable, the same way a scale change is.
+partway through a piece is representable, the same way a scale change is. The
+track's own input UI, preset vocabulary, grid effects beyond the bar line, and
+its interaction with the snap grid are specified in full in
+[tracks.md](./tracks.md#time-signature-track-specified) — this section covers
+only the coordinate-system motivation and the data model below.
 
 ### Continuous beats, not a fixed step grid
 
@@ -143,14 +147,14 @@ overlap policy.
 
 ### Track types built on this abstraction
 
-| Track          | Payload                      | Status                                  |
-| -------------- | ---------------------------- | --------------------------------------- |
-| Tempo          | `{ bpm: number }`            | Formalises the existing single `tempo`  |
-| Time signature | `{ numerator, denominator }` | New — replaces the hardcoded 4-beat bar |
-| Scale          | see [tracks.md](./tracks.md) | Specified                               |
-| Chord          | see [tracks.md](./tracks.md) | Placeholder                             |
-| Labels         | see [tracks.md](./tracks.md) | Placeholder                             |
-| Arranger       | _sections_, not point events | Placeholder — see below                 |
+| Track          | Payload                      | Status                                                                                                     |
+| -------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Tempo          | `{ bpm: number }`            | Formalises the existing single `tempo`                                                                     |
+| Time signature | `{ numerator, denominator }` | Specified — see [tracks.md](./tracks.md#time-signature-track-specified); replaces the hardcoded 4-beat bar |
+| Scale          | see [tracks.md](./tracks.md) | Specified                                                                                                  |
+| Chord          | see [tracks.md](./tracks.md) | Placeholder                                                                                                |
+| Labels         | see [tracks.md](./tracks.md) | Placeholder                                                                                                |
+| Arranger       | _sections_, not point events | Placeholder — see below                                                                                    |
 
 Notes themselves (`Note[]`) are **not** an event track — they're a flat
 collection positioned on the timeline, not a "current value" concept.

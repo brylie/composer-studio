@@ -135,6 +135,7 @@ describe('CommandHistory', () => {
   it('canUndo becomes true after record()', () => {
     history.record('Test', () => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -147,6 +148,7 @@ describe('CommandHistory', () => {
   it('record() clears the redo stack', () => {
     history.record('A', () => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -155,6 +157,7 @@ describe('CommandHistory', () => {
     }));
     history.undo(() => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -164,6 +167,7 @@ describe('CommandHistory', () => {
     expect(history.canRedo).toBe(true);
     history.record('B', () => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -178,6 +182,7 @@ describe('CommandHistory', () => {
       notes: [
         { id: '1', midiNote: 60, startBeat: 0, durationBeats: 1, velocity: 100, layerId: 'l1' },
       ],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -187,6 +192,7 @@ describe('CommandHistory', () => {
     history.record('Transpose', () => snap);
     const entry = history.undo(() => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -202,6 +208,7 @@ describe('CommandHistory', () => {
   it('redo() returns the snapshot and restores canUndo', () => {
     history.record('Move', () => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -210,6 +217,7 @@ describe('CommandHistory', () => {
     }));
     history.undo(() => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -218,6 +226,7 @@ describe('CommandHistory', () => {
     }));
     const entry = history.redo(() => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -233,6 +242,7 @@ describe('CommandHistory', () => {
     expect(
       history.undo(() => ({
         notes: [],
+        timeSignatureEvents: [],
         scaleEvents: [],
         chordEvents: [],
         labelEvents: [],
@@ -246,6 +256,7 @@ describe('CommandHistory', () => {
     expect(
       history.redo(() => ({
         notes: [],
+        timeSignatureEvents: [],
         scaleEvents: [],
         chordEvents: [],
         labelEvents: [],
@@ -259,6 +270,7 @@ describe('CommandHistory', () => {
     for (let i = 0; i < 55; i++) {
       history.record(`Step ${String(i)}`, () => ({
         notes: [],
+        timeSignatureEvents: [],
         scaleEvents: [],
         chordEvents: [],
         labelEvents: [],
@@ -270,6 +282,7 @@ describe('CommandHistory', () => {
     for (let i = 0; i < 50; i++) {
       const entry = history.undo(() => ({
         notes: [],
+        timeSignatureEvents: [],
         scaleEvents: [],
         chordEvents: [],
         labelEvents: [],
@@ -282,6 +295,7 @@ describe('CommandHistory', () => {
     expect(
       history.undo(() => ({
         notes: [],
+        timeSignatureEvents: [],
         scaleEvents: [],
         chordEvents: [],
         labelEvents: [],
@@ -294,6 +308,7 @@ describe('CommandHistory', () => {
   it('exposes undoLabel and redoLabel', () => {
     history.record('First', () => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -303,6 +318,7 @@ describe('CommandHistory', () => {
     expect(history.undoLabel).toBe('First');
     history.undo(() => ({
       notes: [],
+      timeSignatureEvents: [],
       scaleEvents: [],
       chordEvents: [],
       labelEvents: [],
@@ -1024,6 +1040,117 @@ describe('createStore — time signature track', () => {
     const store = createStore();
     expect(store.totalBeats).toBe(64);
     expect(store.barBeats.slice(0, 4)).toEqual([0, 4, 8, 12]);
+  });
+
+  it('beatGroupLines produces 3 internal ticks per bar by default (4/4 fallback)', () => {
+    const store = createStore();
+    expect(store.beatGroupLines.slice(0, 3)).toEqual([1, 2, 3]);
+  });
+
+  it('regression: a mid-bar time signature change never produces duplicate beatGroupLines values', () => {
+    // Reproduces the crash a mid-bar marker used to trigger: adding a 3/4
+    // marker at beat 1 truncates the preceding 4/4 bar to [0, 1) per
+    // barBeats, but beatGroupLinePositions used to compute that truncated
+    // bar's ticks as if it were still a full 4-beat bar — producing beats
+    // (2, 3) that collided with the new bar's own ticks. Duplicate values
+    // fed into the note grid's keyed `{#each}` crash Svelte
+    // (each_key_duplicate); a plain Set-size check catches the regression
+    // without needing a rendered component.
+    const store = createStore();
+    store.upsertTimeSignatureEvent({ id: 'm1', beat: 1, numerator: 3, denominator: 4 });
+    const ticks = store.beatGroupLines;
+    expect(new Set(ticks).size).toBe(ticks.length);
+  });
+
+  it('upsertTimeSignatureEvent adds a new marker and records history', () => {
+    const store = createStore();
+    store.upsertTimeSignatureEvent({ id: 'm1', beat: 8, numerator: 3, denominator: 4 });
+    expect(store.timeSignatureTrack).toHaveLength(2);
+    expect(store.timeSignatureTrack[1]).toEqual({
+      id: 'm1',
+      beat: 8,
+      numerator: 3,
+      denominator: 4,
+    });
+    expect(store.history.canUndo).toBe(true);
+  });
+
+  it('upsertTimeSignatureEvent replaces an existing marker at the same beat instead of stacking', () => {
+    const store = createStore();
+    const defaultId = store.timeSignatureTrack[0].id;
+    store.upsertTimeSignatureEvent({ id: 'replacement', beat: 0, numerator: 3, denominator: 4 });
+    expect(store.timeSignatureTrack).toHaveLength(1);
+    expect(store.timeSignatureTrack[0]).toEqual({
+      id: 'replacement',
+      beat: 0,
+      numerator: 3,
+      denominator: 4,
+    });
+    expect(store.timeSignatureTrack[0].id).not.toBe(defaultId);
+  });
+
+  it('changing bar length via upsertTimeSignatureEvent is reflected in barBeats', () => {
+    const store = createStore();
+    store.upsertTimeSignatureEvent({ id: 'replacement', beat: 0, numerator: 3, denominator: 4 });
+    expect(store.barBeats.slice(0, 4)).toEqual([0, 3, 6, 9]);
+  });
+
+  it('removeTimeSignatureEvent removes a non-beat-0 marker and records history', () => {
+    const store = createStore();
+    store.upsertTimeSignatureEvent({ id: 'm1', beat: 8, numerator: 3, denominator: 4 });
+    store.removeTimeSignatureEvent('m1');
+    expect(store.timeSignatureTrack.some((e) => e.id === 'm1')).toBe(false);
+  });
+
+  it('undo restores a removed time signature marker', () => {
+    const store = createStore();
+    store.upsertTimeSignatureEvent({ id: 'm1', beat: 8, numerator: 3, denominator: 4 });
+    store.removeTimeSignatureEvent('m1');
+    store.undo();
+    expect(store.timeSignatureTrack.some((e) => e.id === 'm1')).toBe(true);
+  });
+
+  it('removeTimeSignatureEvent is a no-op for the marker at beat 0 — a project can never have zero time signature', () => {
+    const store = createStore();
+    const defaultId = store.timeSignatureTrack[0].id;
+    store.removeTimeSignatureEvent(defaultId);
+    expect(store.timeSignatureTrack).toHaveLength(1);
+    expect(store.timeSignatureTrack[0].id).toBe(defaultId);
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('moveTimeSignatureEvent relocates a non-beat-0 marker to a new beat', () => {
+    const store = createStore();
+    store.upsertTimeSignatureEvent({ id: 'm1', beat: 8, numerator: 3, denominator: 4 });
+    store.moveTimeSignatureEvent('m1', 12);
+    expect(store.timeSignatureTrack.find((e) => e.id === 'm1')).toEqual({
+      id: 'm1',
+      beat: 12,
+      numerator: 3,
+      denominator: 4,
+    });
+  });
+
+  it('moveTimeSignatureEvent is a no-op when moving the beat-0 marker away from beat 0', () => {
+    const store = createStore();
+    const defaultId = store.timeSignatureTrack[0].id;
+    store.moveTimeSignatureEvent(defaultId, 8);
+    expect(store.timeSignatureTrack).toHaveLength(1);
+    expect(store.timeSignatureTrack[0].beat).toBe(0);
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('moveTimeSignatureEvent allows a different marker to move onto beat 0, replacing it', () => {
+    const store = createStore();
+    store.upsertTimeSignatureEvent({ id: 'm1', beat: 8, numerator: 3, denominator: 4 });
+    store.moveTimeSignatureEvent('m1', 0);
+    expect(store.timeSignatureTrack).toHaveLength(1);
+    expect(store.timeSignatureTrack[0]).toEqual({
+      id: 'm1',
+      beat: 0,
+      numerator: 3,
+      denominator: 4,
+    });
   });
 });
 

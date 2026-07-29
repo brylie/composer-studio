@@ -9,6 +9,7 @@
 import { get as getChord } from '@tonaljs/chord';
 import { get as getNote, fromMidi as noteNameFromMidi } from '@tonaljs/note';
 import { get as getScale } from '@tonaljs/scale';
+import { get as getTimeSignature } from '@tonaljs/time-signature';
 import { topNoteDiff } from '@tonaljs/voice-leading';
 
 /** A named octave range, e.g. { min: 3, max: 5 } — generate-chords's octaveRange param. */
@@ -68,6 +69,66 @@ export function pitchClassesForChord(root: string, quality: string): Set<number>
  */
 export function pitchClassesForChordEvent(root: number, quality: string): Set<number> {
   return pitchClassesForChord(pitchClassName(root), quality);
+}
+
+// ── Time signatures (tracks.md#time-signature-track-specified) ─────────────
+
+export interface TimeSignaturePreset {
+  numerator: number;
+  denominator: number;
+  label: string;
+}
+
+/**
+ * v1 preset list (tracks.md#v1-preset-picker-not-free-form-entry) — the
+ * simple duple/triple/quadruple meters, cut time, the common compound
+ * meters, and the two "odd" meters common enough to name explicitly. Each
+ * entry is parsed through `TimeSignature.get()` (not just formatted by
+ * hand) so the preset list can never drift from what tonal itself considers
+ * a valid signature.
+ */
+const V1_PRESET_NAMES = ['4/4', '3/4', '2/4', '2/2', '6/8', '9/8', '12/8', '5/4', '7/8'];
+
+/** The fixed v1 time-signature preset list, in display order. */
+export function commonTimeSignatures(): TimeSignaturePreset[] {
+  return V1_PRESET_NAMES.map((name) => {
+    const parsed = parseTimeSignature(name);
+    if (!parsed) throw new Error(`invalid v1 time-signature preset: ${name}`);
+    return { numerator: parsed.numerator, denominator: parsed.denominator, label: name };
+  });
+}
+
+const POWER_OF_TWO_DENOMINATORS = new Set([1, 2, 4, 8, 16, 32]);
+
+/**
+ * Parses a time-signature string (`"4/4"`, `"6/8"`, additive `"3+2+3/8"`)
+ * via tonal's `TimeSignature.get()`, returning null for anything invalid —
+ * a malformed string (tonal throws rather than returning `empty: true` for
+ * some malformed input, hence the try/catch) or a non-power-of-two
+ * denominator, which real time signatures never use
+ * (tracks.md#v2-arbitrary--additive-signatures).
+ */
+export function parseTimeSignature(
+  input: string,
+): { numerator: number; denominator: number; groups?: number[] } | null {
+  let result;
+  try {
+    result = getTimeSignature(input);
+  } catch {
+    return null;
+  }
+  if (result.empty) return null;
+
+  const denominator = result.lower;
+  if (!POWER_OF_TWO_DENOMINATORS.has(denominator)) return null;
+
+  const numerator = Array.isArray(result.upper)
+    ? result.upper.reduce((sum, n) => sum + n, 0)
+    : result.upper;
+
+  return result.additive.length > 0
+    ? { numerator, denominator, groups: result.additive }
+    : { numerator, denominator };
 }
 
 /** MIDI note number at the bottom of scientific-pitch-notation octave `octave` (C at that octave). */
