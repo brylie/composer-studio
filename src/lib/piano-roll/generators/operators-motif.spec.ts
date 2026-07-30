@@ -55,6 +55,7 @@ describe('motifGenerateOperator', () => {
       {},
       request({ params: { ...baseParams, contour: 'arch' } }),
     );
+    expect((archResult.notes as NotePlan).notes).toHaveLength(4);
     const malformedResult = motifGenerateOperator.process(
       ctx,
       {},
