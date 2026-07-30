@@ -236,3 +236,79 @@ export function voiceChord(
   // edge case above (or a future change) would otherwise let one slip through.
   return [...new Set(voicing)].sort((a, b) => a - b);
 }
+
+// ── Scale/chord degree helpers (generators.md §13) ──────────────────────────
+
+/**
+ * Every MIDI note in `[minMidi, maxMidi]` whose pitch class belongs to
+ * `pitchClasses` — the shared primitive behind both "scale-constrained" and
+ * "chord-constrained" pitch generators (generators.md §13), since both
+ * reduce to the same pitch-class-set-within-a-range operation once the set
+ * itself comes from pitchClassesForScaleEvent/pitchClassesForChordEvent.
+ */
+export function notesInPitchClassRange(
+  pitchClasses: ReadonlySet<number>,
+  minMidi: number,
+  maxMidi: number,
+): number[] {
+  const notes: number[] = [];
+  for (let midi = minMidi; midi <= maxMidi; midi++) {
+    if (pitchClasses.has(((midi % 12) + 12) % 12)) notes.push(midi);
+  }
+  return notes;
+}
+
+/**
+ * The nearest scale-tone MIDI note to `midi` in the given direction,
+ * inclusive of `midi` itself. Bespoke rather than a Tonal primitive: Tonal
+ * exposes scale membership and note arithmetic, but not "step from an
+ * arbitrary MIDI number to the nearest in-scale one," which is this app's own
+ * pitch-quantization concern (generators.md §3's "constraint solving").
+ * Returns null only when `mode` has no notes at all (an invalid scale name).
+ */
+export function nearestScaleTone(
+  root: number,
+  mode: string,
+  midi: number,
+  direction: 'up' | 'down',
+): number | null {
+  const pitchClasses = pitchClassesForScaleEvent(root, mode);
+  if (pitchClasses.size === 0) return null;
+  const step = direction === 'up' ? 1 : -1;
+  let candidate = midi;
+  for (let i = 0; i <= 12; i++) {
+    if (pitchClasses.has(((candidate % 12) + 12) % 12)) return candidate;
+    candidate += step;
+  }
+  return null; // unreachable when pitchClasses.size > 0, kept defensive rather than a non-null assertion
+}
+
+/**
+ * Steps `degree` scale positions away from the scale tone nearest to
+ * `anchorMidi` (0 = that nearest tone itself), walking one semitone at a time
+ * and skipping non-scale-tones — so degree offsets remain correct across
+ * octave boundaries and irregular (non-heptatonic) scales alike. Used by
+ * motif-generate to turn a contour's relative degree shape into concrete
+ * MIDI notes (generators.md §9.3).
+ */
+export function scaleDegreeToMidi(
+  root: number,
+  mode: string,
+  degree: number,
+  anchorMidi: number,
+): number | null {
+  const pitchClasses = pitchClassesForScaleEvent(root, mode);
+  if (pitchClasses.size === 0) return null;
+  const anchor = nearestScaleTone(root, mode, anchorMidi, 'up');
+  if (anchor === null) return null;
+  let midi: number = anchor;
+  let remaining = degree;
+  const step = remaining >= 0 ? 1 : -1;
+  while (remaining !== 0) {
+    let candidate: number = midi + step;
+    while (!pitchClasses.has(((candidate % 12) + 12) % 12)) candidate += step;
+    midi = candidate;
+    remaining -= step;
+  }
+  return midi;
+}

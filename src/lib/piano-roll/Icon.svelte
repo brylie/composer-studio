@@ -107,8 +107,29 @@
       { tag: 'line', x1: 3, y1: 9, x2: 10, y2: 9 },
     ],
 
-    // ── Generator icons (generators.md §18 Phase C) ──
+    // ── Generator icons (generators.md §18 Phases C-D) ──
     pulse: [{ tag: 'path', d: 'M1 6.5H3.5L5 2L8 11L9.5 6.5H12' }],
+    // Three ascending notes joined by a rising line — arpeggiate.
+    arpeggio: [
+      { tag: 'circle', cx: 2.5, cy: 10, r: 1.3, fill: 'currentColor' },
+      { tag: 'circle', cx: 6.5, cy: 6.5, r: 1.3, fill: 'currentColor' },
+      { tag: 'circle', cx: 10.5, cy: 3, r: 1.3, fill: 'currentColor' },
+      { tag: 'path', d: 'M2.5 10L6.5 6.5L10.5 3' },
+    ],
+    // A loop of two opposing arrows — ostinato/repetition.
+    repeat: [
+      { tag: 'path', d: 'M2.5 4H9.5' },
+      { tag: 'path', d: 'M7.5 1.5L9.8 4L7.5 6.5' },
+      { tag: 'path', d: 'M10.5 9H3.5' },
+      { tag: 'path', d: 'M5.5 6.5L3.2 9L5.5 11.5' },
+    ],
+    // A short melodic arch with three marked notes — motif.
+    motif: [
+      { tag: 'path', d: 'M1.5 9C3.5 9 3.5 3 6.5 3C9.5 3 9.5 9 11.5 9' },
+      { tag: 'circle', cx: 1.5, cy: 9, r: 1, fill: 'currentColor' },
+      { tag: 'circle', cx: 6.5, cy: 3, r: 1, fill: 'currentColor' },
+      { tag: 'circle', cx: 11.5, cy: 9, r: 1, fill: 'currentColor' },
+    ],
     refresh: [
       { tag: 'path', d: 'M2.2 6.5A4.5 4.5 0 1 1 3.7 9.8' },
       { tag: 'path', d: 'M1.3 4.3L2.2 6.5L4.4 5.8' },

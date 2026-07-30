@@ -10,30 +10,23 @@
 // Phase D's assigned catalog.
 
 import { MAX_MIDI, MIN_DURATION_BEATS, MIN_MIDI } from '../types.js';
+import { clampMidi, clampToPitchBounds, clampUnit, clampVelocity } from './operator-utils.js';
+import { arpeggiateOperator } from './operators-arpeggiate.js';
+import {
+  chordSourceOperator,
+  eventRenderNotesOperator,
+  smoothVoicingOperator,
+} from './operators-harmony.js';
+import { motifGenerateOperator } from './operators-motif.js';
+import { ostinatoGenerateOperator } from './operators-ostinato.js';
+import { euclideanGateOperator, euclideanSourceOperator } from './operators-rhythm.js';
 import { createSeededRandom, deriveSeed } from './random.js';
 import type {
   GeneratedNoteDraft,
-  GeneratorBounds,
   GeneratorOperatorDescriptor,
   NotePlan,
   RhythmPlan,
 } from './types.js';
-
-function clampUnit(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
-function clampMidi(value: number): number {
-  return Math.max(MIN_MIDI, Math.min(MAX_MIDI, Math.round(value)));
-}
-
-function clampVelocity(value: number): number {
-  return Math.max(1, Math.min(127, Math.round(value)));
-}
-
-function clampToPitchBounds(midiNote: number, bounds: GeneratorBounds): number {
-  return Math.max(bounds.pitch.minMidi, Math.min(bounds.pitch.maxMidi, midiNote));
-}
 
 // ── pulse-source (generators.md §9.1) ───────────────────────────────────────
 
@@ -245,8 +238,20 @@ export const transposeNotesOperator: GeneratorOperatorDescriptor = {
   },
 };
 
+// Phase D's harmony/rhythm/arpeggio/ostinato/motif operators (generators.md
+// §18) live in sibling operators-*.ts files, one per family, rather than
+// growing this file indefinitely — but the registry stays one combined map
+// here so every other module can keep importing a single `operatorRegistry`.
 export const operatorRegistry: ReadonlyMap<string, GeneratorOperatorDescriptor> = new Map([
   [pulseSourceOperator.id, pulseSourceOperator],
   [pulseRenderNotesOperator.id, pulseRenderNotesOperator],
   [transposeNotesOperator.id, transposeNotesOperator],
+  [chordSourceOperator.id, chordSourceOperator],
+  [smoothVoicingOperator.id, smoothVoicingOperator],
+  [eventRenderNotesOperator.id, eventRenderNotesOperator],
+  [euclideanSourceOperator.id, euclideanSourceOperator],
+  [euclideanGateOperator.id, euclideanGateOperator],
+  [arpeggiateOperator.id, arpeggiateOperator],
+  [ostinatoGenerateOperator.id, ostinatoGenerateOperator],
+  [motifGenerateOperator.id, motifGenerateOperator],
 ]);
