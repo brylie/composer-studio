@@ -4,7 +4,7 @@
 // bounds) at the point of generation, so an operator's own output rarely
 // trips a diagnostic in the first place.
 
-import { MAX_MIDI, MIN_MIDI } from '../types.js';
+import { MAX_MIDI, MIN_DURATION_BEATS, MIN_MIDI } from '../types.js';
 import type { GeneratorBounds } from './types.js';
 
 export function clampUnit(value: number): number {
@@ -21,4 +21,29 @@ export function clampVelocity(value: number): number {
 
 export function clampToPitchBounds(midiNote: number, bounds: GeneratorBounds): number {
   return Math.max(bounds.pitch.minMidi, Math.min(bounds.pitch.maxMidi, midiNote));
+}
+
+/** A Euclidean pattern's step count, clamped to at least one step. */
+export function clampSteps(value: unknown, fallback: number): number {
+  return Math.max(1, Math.round(Number(value ?? fallback)));
+}
+
+/** A Euclidean pattern's pulse count, clamped to `[0, steps]`. */
+export function clampPulses(value: unknown, steps: number, fallback: number): number {
+  return Math.max(0, Math.min(steps, Math.round(Number(value ?? fallback))));
+}
+
+/**
+ * An onset's duration once gated to `rawDuration` and clamped so it never
+ * runs past `bounds.time.endBeat` unless the bounds allow a tail — the
+ * "gate then clamp to remaining bounds" arithmetic pulse-source and
+ * euclidean-source both need for a step starting at `startBeat`.
+ */
+export function gatedDuration(
+  rawDuration: number,
+  startBeat: number,
+  bounds: GeneratorBounds,
+): number {
+  const gated = Math.max(MIN_DURATION_BEATS, rawDuration);
+  return bounds.allowTail ? gated : Math.min(gated, bounds.time.endBeat - startBeat);
 }

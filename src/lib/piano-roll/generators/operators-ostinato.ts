@@ -16,7 +16,7 @@ import {
 import { activeEventAt } from '../timeline.js';
 import { MIN_DURATION_BEATS } from '../types.js';
 import { clampMidi, clampToPitchBounds, clampVelocity } from './operator-utils.js';
-import { createSeededRandom, deriveSeed } from './random.js';
+import { dimensionRandom } from './random.js';
 import type {
   GeneratedNoteDraft,
   GeneratorBounds,
@@ -204,13 +204,7 @@ export const ostinatoGenerateOperator: GeneratorOperatorDescriptor = {
       return { notes: { kind: 'notes', bounds, diagnostics: [], notes: [] } satisfies NotePlan };
     }
 
-    const pitchSeed = deriveSeed(
-      variation.seed,
-      variation.locks.pitch ? 0 : variation.generation,
-      'pitch',
-      nodeId,
-    );
-    const random = createSeededRandom(pitchSeed);
+    const random = dimensionRandom(variation, nodeId, 'pitch');
 
     const notes: GeneratedNoteDraft[] = [];
     let eventIndex = 0;

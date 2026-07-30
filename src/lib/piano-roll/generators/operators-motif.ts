@@ -8,7 +8,7 @@ import { scaleDegreeToMidi } from '../../music-theory/index.js';
 import { activeEventAt } from '../timeline.js';
 import { MIN_DURATION_BEATS } from '../types.js';
 import { clampMidi, clampToPitchBounds, clampUnit } from './operator-utils.js';
-import { createSeededRandom, deriveSeed } from './random.js';
+import { dimensionRandom } from './random.js';
 import type { GeneratedNoteDraft, GeneratorOperatorDescriptor, NotePlan } from './types.js';
 
 export type MotifContour = 'arch' | 'valley' | 'ascending' | 'descending' | 'mixed';
@@ -153,13 +153,7 @@ export const motifGenerateOperator: GeneratorOperatorDescriptor = {
     const repetition = Math.max(1, Math.round(Number(params.repetition ?? 2)));
     const variationAmount = clampUnit(Number(params.variationAmount ?? 0.15));
 
-    const contourSeed = deriveSeed(
-      variation.seed,
-      variation.locks.contour ? 0 : variation.generation,
-      'contour',
-      nodeId,
-    );
-    const contourRandom = createSeededRandom(contourSeed);
+    const contourRandom = dimensionRandom(variation, nodeId, 'contour');
     const degrees = buildContourDegrees(eventCount, contour, contourRandom);
 
     const selectionAnchor =
@@ -189,13 +183,7 @@ export const motifGenerateOperator: GeneratorOperatorDescriptor = {
       previousMidi = midi;
     }
 
-    const pitchSeed = deriveSeed(
-      variation.seed,
-      variation.locks.pitch ? 0 : variation.generation,
-      'pitch',
-      nodeId,
-    );
-    const pitchRandom = createSeededRandom(pitchSeed);
+    const pitchRandom = dimensionRandom(variation, nodeId, 'pitch');
 
     const notes: GeneratedNoteDraft[] = [];
     let eventIndex = 0;

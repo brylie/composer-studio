@@ -11,7 +11,7 @@ import { voiceChord } from '../../music-theory/index.js';
 import { chordSegments } from '../tracks.js';
 import { MIN_DURATION_BEATS } from '../types.js';
 import { clampMidi, clampToPitchBounds, clampUnit, clampVelocity } from './operator-utils.js';
-import { createSeededRandom, deriveSeed } from './random.js';
+import { dimensionRandom } from './random.js';
 import type {
   EventPlan,
   GeneratedNoteDraft,
@@ -35,22 +35,20 @@ export interface ChordSourceParams extends Record<string, unknown> {
  * to a GeneratorBounds-scoped request instead of a whole-selection beatRange.
  */
 function segmentSelection(ctx: GeneratorContext, bounds: GeneratorBounds): HarmonyPlan['segments'] {
-  const starts = [...new Set(ctx.notes.map((n) => n.startBeat))]
-    .filter((startBeat) => startBeat >= bounds.time.startBeat && startBeat < bounds.time.endBeat)
-    .sort((a, b) => a - b);
-  return starts
-    .map((startBeat, i) => {
-      const endBeat = i + 1 < starts.length ? starts[i + 1] : bounds.time.endBeat;
-      const pitchClasses = [
-        ...new Set(
-          ctx.notes
-            .filter((n) => n.startBeat === startBeat)
-            .map((n) => ((n.midiNote % 12) + 12) % 12),
-        ),
-      ];
-      return { startBeat, endBeat, root: pitchClasses[0] ?? 0, quality: '', pitchClasses };
-    })
-    .filter((segment) => segment.pitchClasses.length > 0);
+  const pitchClassesByStart = new Map<number, Set<number>>();
+  for (const note of ctx.notes) {
+    if (note.startBeat < bounds.time.startBeat || note.startBeat >= bounds.time.endBeat) continue;
+    const pitchClass = ((note.midiNote % 12) + 12) % 12;
+    const existing = pitchClassesByStart.get(note.startBeat);
+    if (existing) existing.add(pitchClass);
+    else pitchClassesByStart.set(note.startBeat, new Set([pitchClass]));
+  }
+  const starts = [...pitchClassesByStart.keys()].sort((a, b) => a - b);
+  return starts.map((startBeat, i) => {
+    const endBeat = i + 1 < starts.length ? starts[i + 1] : bounds.time.endBeat;
+    const pitchClasses = [...(pitchClassesByStart.get(startBeat) ?? [])];
+    return { startBeat, endBeat, root: pitchClasses[0] ?? 0, quality: '', pitchClasses };
+  });
 }
 
 function segmentChordTrack(
@@ -218,13 +216,7 @@ export const eventRenderNotesOperator: GeneratorOperatorDescriptor = {
     const { bounds, variation, nodeId } = request;
     const velocityVariation = clampUnit(Number(request.params.velocityVariation ?? 0));
 
-    const dynamicsSeed = deriveSeed(
-      variation.seed,
-      variation.locks.dynamics ? 0 : variation.generation,
-      'dynamics',
-      nodeId,
-    );
-    const random = createSeededRandom(dynamicsSeed);
+    const random = dimensionRandom(variation, nodeId, 'dynamics');
 
     const notes: GeneratedNoteDraft[] = [];
     let i = 0;

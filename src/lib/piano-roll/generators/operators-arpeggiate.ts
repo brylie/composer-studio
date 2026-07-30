@@ -6,7 +6,7 @@
 
 import { MIN_DURATION_BEATS } from '../types.js';
 import { clampMidi, clampToPitchBounds, clampUnit } from './operator-utils.js';
-import { createSeededRandom, deriveSeed } from './random.js';
+import { dimensionRandom } from './random.js';
 import type { EventPlan, GeneratorOperatorDescriptor } from './types.js';
 
 export type ArpeggiatePattern = 'up' | 'down' | 'up-down' | 'down-up' | 'random';
@@ -127,13 +127,7 @@ export const arpeggiateOperator: GeneratorOperatorDescriptor = {
     const gate = clampUnit(Number(params.gate ?? 0.8));
     const restart = params.restart === 'continuous' ? 'continuous' : 'per-chord';
 
-    const contourSeed = deriveSeed(
-      variation.seed,
-      variation.locks.contour ? 0 : variation.generation,
-      'contour',
-      nodeId,
-    );
-    const random = createSeededRandom(contourSeed);
+    const random = dimensionRandom(variation, nodeId, 'contour');
 
     const outEvents: EventPlan['events'] = [];
     let continuousIndex = 0;

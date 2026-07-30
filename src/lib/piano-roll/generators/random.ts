@@ -2,6 +2,9 @@
 // never call Math.random(); deriveSeed/createSeededRandom are the only
 // permitted source of variation.
 
+import { createSeededRandom } from '../random.js';
+import type { VariationLocks, VariationState } from './types.js';
+
 export { createSeededRandom } from '../random.js';
 
 /**
@@ -43,6 +46,28 @@ export function deriveSeed(
   ...keyParts: (string | number)[]
 ): number {
   return hashToUint32(encodeParts([seed, generation, ...keyParts]));
+}
+
+/**
+ * A seeded RNG for one node's use of one VariationLocks dimension —
+ * `deriveSeed(variation.seed, locked ? 0 : variation.generation, dimension, nodeId)`
+ * plus `createSeededRandom`, the pattern every operator that varies by a
+ * lock dimension needs (generators.md §4.5). Locking a dimension pins its
+ * sub-seed's generation component to 0, so a locked reroll stays stable
+ * while other, unlocked dimensions still vary.
+ */
+export function dimensionRandom(
+  variation: VariationState,
+  nodeId: string,
+  dimension: keyof VariationLocks,
+): () => number {
+  const seed = deriveSeed(
+    variation.seed,
+    variation.locks[dimension] ? 0 : variation.generation,
+    dimension,
+    nodeId,
+  );
+  return createSeededRandom(seed);
 }
 
 /**

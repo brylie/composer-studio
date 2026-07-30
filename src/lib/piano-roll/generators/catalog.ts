@@ -61,6 +61,23 @@ function serialRecipe(nodes: GeneratorNodeInstance[], outputPort: string): Gener
   };
 }
 
+/** A `getDefaultBounds` starting at the playhead, spanning `spanBeats` (default 4), over a fixed `pitch` range. */
+function makeDefaultBounds(
+  pitch: { minMidi: number; maxMidi: number },
+  spanBeats: number = DEFAULT_SPAN_BEATS,
+): GeneratorDescriptor['getDefaultBounds'] {
+  return (ctx) => {
+    const startBeat = Math.max(0, Math.floor(ctx.playhead));
+    return {
+      time: { startBeat, endBeat: startBeat + spanBeats },
+      pitch,
+      allowTail: false,
+    };
+  };
+}
+
+const DEFAULT_HARMONY_PITCH = makeDefaultBounds({ minMidi: 48, maxMidi: 84 });
+
 export const pulsePatternGenerator: GeneratorDescriptor = {
   id: 'pulse-pattern',
   version: 1,
@@ -71,48 +88,11 @@ export const pulsePatternGenerator: GeneratorDescriptor = {
   icon: 'pulse',
   tags: ['rhythm', 'pulse'],
   isApplicable: () => true,
-  getDefaultBounds(ctx) {
-    const startBeat = Math.max(0, Math.floor(ctx.playhead));
-    return {
-      time: { startBeat, endBeat: startBeat + DEFAULT_SPAN_BEATS },
-      pitch: { minMidi: 48, maxMidi: 84 },
-      allowTail: false,
-    };
-  },
+  getDefaultBounds: DEFAULT_HARMONY_PITCH,
   createDefaultRecipe(ctx): GeneratorRecipe {
-    const sourceNode: GeneratorNodeInstance = {
-      id: crypto.randomUUID(),
-      operatorId: pulseSourceOperator.id,
-      operatorVersion: pulseSourceOperator.version,
-      params: pulseSourceOperator.getDefaultParams(ctx),
-      enabled: true,
-    };
-    const rendererNode: GeneratorNodeInstance = {
-      id: crypto.randomUUID(),
-      operatorId: pulseRenderNotesOperator.id,
-      operatorVersion: pulseRenderNotesOperator.version,
-      params: pulseRenderNotesOperator.getDefaultParams(ctx),
-      enabled: true,
-    };
-    const nodes = [sourceNode, rendererNode];
-    const { edges } = autoWireSerial(nodes, operatorRegistry);
-    return {
-      id: crypto.randomUUID(),
-      version: 1,
-      nodes,
-      edges,
-      output: { nodeId: rendererNode.id, port: 'notes' },
-    };
+    const nodes = [makeNode(pulseSourceOperator, ctx), makeNode(pulseRenderNotesOperator, ctx)];
+    return serialRecipe(nodes, 'notes');
   },
-};
-
-const DEFAULT_HARMONY_PITCH: GeneratorDescriptor['getDefaultBounds'] = (ctx) => {
-  const startBeat = Math.max(0, Math.floor(ctx.playhead));
-  return {
-    time: { startBeat, endBeat: startBeat + DEFAULT_SPAN_BEATS },
-    pitch: { minMidi: 48, maxMidi: 84 },
-    allowTail: false,
-  };
 };
 
 /**
@@ -187,14 +167,7 @@ export const euclideanRhythmGenerator: GeneratorDescriptor = {
   icon: 'pulse',
   tags: ['rhythm', 'euclidean'],
   isApplicable: () => true,
-  getDefaultBounds(ctx) {
-    const startBeat = Math.max(0, Math.floor(ctx.playhead));
-    return {
-      time: { startBeat, endBeat: startBeat + DEFAULT_SPAN_BEATS },
-      pitch: { minMidi: 36, maxMidi: 84 },
-      allowTail: false,
-    };
-  },
+  getDefaultBounds: makeDefaultBounds({ minMidi: 36, maxMidi: 84 }),
   createDefaultRecipe(ctx): GeneratorRecipe {
     const nodes = [makeNode(euclideanSourceOperator, ctx), makeNode(pulseRenderNotesOperator, ctx)];
     return serialRecipe(nodes, 'notes');
@@ -212,14 +185,7 @@ export const ostinatoGenerator: GeneratorDescriptor = {
   icon: 'repeat',
   tags: ['ostinato', 'repetition'],
   isApplicable: () => true,
-  getDefaultBounds(ctx) {
-    const startBeat = Math.max(0, Math.floor(ctx.playhead));
-    return {
-      time: { startBeat, endBeat: startBeat + 8 },
-      pitch: { minMidi: 36, maxMidi: 84 },
-      allowTail: false,
-    };
-  },
+  getDefaultBounds: makeDefaultBounds({ minMidi: 36, maxMidi: 84 }, 8),
   createDefaultRecipe(ctx): GeneratorRecipe {
     return serialRecipe([makeNode(ostinatoGenerateOperator, ctx)], 'notes');
   },
