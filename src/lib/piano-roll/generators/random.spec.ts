@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveEventKey, deriveSeed, dimensionRandom } from './random.js';
-import { makeVariation } from './test-helpers.js';
+import { deriveEventKey, deriveSeed } from './random.js';
 
 describe('deriveSeed', () => {
   it('is deterministic for the same inputs', () => {
@@ -56,48 +55,5 @@ describe('deriveEventKey', () => {
   it('does not collide when a separator falls at a different point inside a part', () => {
     // A plain ':'-joined key would encode both of these as "a:b:c:0".
     expect(deriveEventKey('a:b', 'c', 0)).not.toBe(deriveEventKey('a', 'b:c', 0));
-  });
-});
-
-describe('dimensionRandom', () => {
-  it('is deterministic for the same variation/nodeId/dimension', () => {
-    const variation = makeVariation({ generation: 2 });
-    expect(dimensionRandom(variation, 'node', 'pitch')()).toBe(
-      dimensionRandom(variation, 'node', 'pitch')(),
-    );
-  });
-
-  it('varies across generations when the dimension is unlocked', () => {
-    const first = dimensionRandom(makeVariation({ generation: 0 }), 'node', 'pitch')();
-    const second = dimensionRandom(makeVariation({ generation: 1 }), 'node', 'pitch')();
-    expect(first).not.toBe(second);
-  });
-
-  it('stays stable across generations when the dimension is locked', () => {
-    const locks = { ...makeVariation().locks, pitch: true };
-    const first = dimensionRandom(makeVariation({ generation: 0, locks }), 'node', 'pitch')();
-    const second = dimensionRandom(makeVariation({ generation: 1, locks }), 'node', 'pitch')();
-    expect(first).toBe(second);
-  });
-
-  it('locking one dimension does not affect an unlocked dimension varying by generation', () => {
-    const locks = { ...makeVariation().locks, pitch: true };
-    const first = dimensionRandom(makeVariation({ generation: 0, locks }), 'node', 'contour')();
-    const second = dimensionRandom(makeVariation({ generation: 1, locks }), 'node', 'contour')();
-    expect(first).not.toBe(second);
-  });
-
-  it('produces independent sequences per dimension for the same variation/nodeId', () => {
-    const variation = makeVariation();
-    const pitch = dimensionRandom(variation, 'node', 'pitch')();
-    const rhythm = dimensionRandom(variation, 'node', 'rhythm')();
-    expect(pitch).not.toBe(rhythm);
-  });
-
-  it('produces independent sequences per nodeId for the same variation/dimension', () => {
-    const variation = makeVariation();
-    const a = dimensionRandom(variation, 'node-a', 'pitch')();
-    const b = dimensionRandom(variation, 'node-b', 'pitch')();
-    expect(a).not.toBe(b);
   });
 });

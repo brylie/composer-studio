@@ -9,30 +9,31 @@
 // module chain, reroll/locks, Recompute) end to end without reaching into
 // Phase D's assigned catalog.
 
-import { MAX_MIDI, MIN_MIDI } from '../types.js';
-import {
-  clampMidi,
-  clampToPitchBounds,
-  clampUnit,
-  clampVelocity,
-  gatedDuration,
-} from './operator-utils.js';
-import { arpeggiateOperator } from './operators-arpeggiate.js';
-import {
-  chordSourceOperator,
-  eventRenderNotesOperator,
-  smoothVoicingOperator,
-} from './operators-harmony.js';
-import { motifGenerateOperator } from './operators-motif.js';
-import { ostinatoGenerateOperator } from './operators-ostinato.js';
-import { euclideanGateOperator, euclideanSourceOperator } from './operators-rhythm.js';
-import { dimensionRandom } from './random.js';
+import { MAX_MIDI, MIN_DURATION_BEATS, MIN_MIDI } from '../types.js';
+import { createSeededRandom, deriveSeed } from './random.js';
 import type {
   GeneratedNoteDraft,
+  GeneratorBounds,
   GeneratorOperatorDescriptor,
   NotePlan,
   RhythmPlan,
 } from './types.js';
+
+function clampUnit(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function clampMidi(value: number): number {
+  return Math.max(MIN_MIDI, Math.min(MAX_MIDI, Math.round(value)));
+}
+
+function clampVelocity(value: number): number {
+  return Math.max(1, Math.min(127, Math.round(value)));
+}
+
+function clampToPitchBounds(midiNote: number, bounds: GeneratorBounds): number {
+  return Math.max(bounds.pitch.minMidi, Math.min(bounds.pitch.maxMidi, midiNote));
+}
 
 // ── pulse-source (generators.md §9.1) ───────────────────────────────────────
 
@@ -90,7 +91,13 @@ export const pulseSourceOperator: GeneratorOperatorDescriptor = {
     const gate = clampUnit(Number(request.params.gate ?? 0.8));
     const restProbability = clampUnit(Number(request.params.restProbability ?? 0));
 
-    const random = dimensionRandom(variation, nodeId, 'rhythm');
+    const rhythmSeed = deriveSeed(
+      variation.seed,
+      variation.locks.rhythm ? 0 : variation.generation,
+      'rhythm',
+      nodeId,
+    );
+    const random = createSeededRandom(rhythmSeed);
 
     // Iterates by onset start rather than a precomputed `floor(span /
     // stepBeats)` step count — that undercounts whenever the span isn't an
@@ -108,7 +115,10 @@ export const pulseSourceOperator: GeneratorOperatorDescriptor = {
       startBeat += stepBeats, i++
     ) {
       if (restProbability > 0 && random() < restProbability) continue;
-      const durationBeats = gatedDuration(stepBeats * gate, startBeat, bounds);
+      const gateDuration = Math.max(MIN_DURATION_BEATS, stepBeats * gate);
+      const durationBeats = bounds.allowTail
+        ? gateDuration
+        : Math.min(gateDuration, bounds.time.endBeat - startBeat);
       events.push({
         startBeat,
         durationBeats,
@@ -169,7 +179,13 @@ export const pulseRenderNotesOperator: GeneratorOperatorDescriptor = {
     const baseVelocity = clampVelocity(Number(request.params.velocity ?? 100));
     const velocityVariation = clampUnit(Number(request.params.velocityVariation ?? 0));
 
-    const random = dimensionRandom(variation, nodeId, 'dynamics');
+    const dynamicsSeed = deriveSeed(
+      variation.seed,
+      variation.locks.dynamics ? 0 : variation.generation,
+      'dynamics',
+      nodeId,
+    );
+    const random = createSeededRandom(dynamicsSeed);
 
     const notes: GeneratedNoteDraft[] = events.map((event, i) => {
       const jitter =
@@ -229,20 +245,8 @@ export const transposeNotesOperator: GeneratorOperatorDescriptor = {
   },
 };
 
-// Phase D's harmony/rhythm/arpeggio/ostinato/motif operators (generators.md
-// §18) live in sibling operators-*.ts files, one per family, rather than
-// growing this file indefinitely — but the registry stays one combined map
-// here so every other module can keep importing a single `operatorRegistry`.
 export const operatorRegistry: ReadonlyMap<string, GeneratorOperatorDescriptor> = new Map([
   [pulseSourceOperator.id, pulseSourceOperator],
   [pulseRenderNotesOperator.id, pulseRenderNotesOperator],
   [transposeNotesOperator.id, transposeNotesOperator],
-  [chordSourceOperator.id, chordSourceOperator],
-  [smoothVoicingOperator.id, smoothVoicingOperator],
-  [eventRenderNotesOperator.id, eventRenderNotesOperator],
-  [euclideanSourceOperator.id, euclideanSourceOperator],
-  [euclideanGateOperator.id, euclideanGateOperator],
-  [arpeggiateOperator.id, arpeggiateOperator],
-  [ostinatoGenerateOperator.id, ostinatoGenerateOperator],
-  [motifGenerateOperator.id, motifGenerateOperator],
 ]);

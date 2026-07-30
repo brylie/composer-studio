@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   commonTimeSignatures,
-  nearestScaleTone,
-  notesInPitchClassRange,
   parseTimeSignature,
   pitchClassesForChord,
   pitchClassesForScale,
   pitchClassesForScaleEvent,
-  scaleDegreeToMidi,
   voiceChord,
 } from './index.js';
 
@@ -207,68 +204,5 @@ describe('parseTimeSignature', () => {
 
   it('rejects a non-power-of-two denominator', () => {
     expect(parseTimeSignature('3/5')).toBeNull();
-  });
-});
-
-describe('notesInPitchClassRange', () => {
-  it('returns every MIDI note in range whose pitch class is in the set', () => {
-    const cMajor = pitchClassesForScale('C', 'major');
-    expect(notesInPitchClassRange(cMajor, 60, 72)).toEqual([60, 62, 64, 65, 67, 69, 71, 72]);
-  });
-
-  it('returns an empty array for an empty pitch-class set', () => {
-    expect(notesInPitchClassRange(new Set(), 60, 72)).toEqual([]);
-  });
-
-  it('returns an empty array when minMidi > maxMidi', () => {
-    expect(notesInPitchClassRange(new Set([0]), 72, 60)).toEqual([]);
-  });
-});
-
-describe('nearestScaleTone', () => {
-  it('returns the note itself when it is already a scale tone', () => {
-    expect(nearestScaleTone(0, 'major', 64, 'up')).toBe(64); // E4, in C major
-  });
-
-  it('steps up to the next scale tone', () => {
-    expect(nearestScaleTone(0, 'major', 66, 'up')).toBe(67); // F#4 -> G4 in C major
-  });
-
-  it('steps down to the previous scale tone', () => {
-    expect(nearestScaleTone(0, 'major', 66, 'down')).toBe(65); // F#4 -> F4 in C major
-  });
-
-  it('returns null for an invalid scale name', () => {
-    expect(nearestScaleTone(0, 'not-a-real-scale', 60, 'up')).toBeNull();
-  });
-});
-
-describe('scaleDegreeToMidi', () => {
-  it('returns the nearest scale tone at degree 0', () => {
-    expect(scaleDegreeToMidi(0, 'major', 0, 60)).toBe(60); // C4 already in C major
-  });
-
-  it('steps up through successive scale degrees', () => {
-    // C major from C4: degree 1 -> D4, degree 2 -> E4
-    expect(scaleDegreeToMidi(0, 'major', 1, 60)).toBe(62);
-    expect(scaleDegreeToMidi(0, 'major', 2, 60)).toBe(64);
-  });
-
-  it('steps down through successive scale degrees', () => {
-    expect(scaleDegreeToMidi(0, 'major', -1, 60)).toBe(59); // C4 -> B3
-  });
-
-  it('crosses octave boundaries correctly', () => {
-    // C major has 7 degrees; 7 steps up from C4 lands on C5.
-    expect(scaleDegreeToMidi(0, 'major', 7, 60)).toBe(72);
-  });
-
-  it('is the inverse of itself in the opposite direction', () => {
-    const up = scaleDegreeToMidi(0, 'major', 3, 60);
-    expect(scaleDegreeToMidi(0, 'major', -3, up ?? 0)).toBe(60);
-  });
-
-  it('returns null for an invalid scale name', () => {
-    expect(scaleDegreeToMidi(0, 'not-a-real-scale', 1, 60)).toBeNull();
   });
 });

@@ -1,8 +1,7 @@
-// Test-only fixtures for generator domain/evaluator/operator tests.
+// Test-only fixtures for generator domain/evaluator tests — not part of the
+// real operator catalog (that lands in a later phase).
 
 import { makeCommandContext } from '../commands/test-helpers.js';
-import type { ChordEvent, ScaleEvent, TimeSignatureEvent } from '../timeline.js';
-import type { Note } from '../types.js';
 import { createGeneratorContext } from './context.js';
 import { createSeededRandom, deriveSeed } from './random.js';
 import type {
@@ -40,32 +39,9 @@ export function makeVariation(overrides: Partial<VariationState> = {}): Variatio
   };
 }
 
-export interface MakeGeneratorContextOptions {
-  activeLayerId?: string;
-  /** All document notes; `selectedIds` picks which of these become `ctx.notes`/the selection. */
-  allNotes?: Note[];
-  selectedIds?: Set<string>;
-  chordTrack?: ChordEvent[];
-  scaleTrack?: ScaleEvent[];
-  timeSignatureTrack?: TimeSignatureEvent[];
-  layerNotes?: Note[];
-}
-
-export function makeGeneratorContext(
-  overrides: MakeGeneratorContextOptions = {},
-): GeneratorContext {
-  const allNotes = overrides.allNotes ?? [];
-  const ctx = makeCommandContext(allNotes, overrides.selectedIds ?? new Set(), {
-    activeLayerId: overrides.activeLayerId,
-    chordTrack: overrides.chordTrack,
-  });
-  return createGeneratorContext(
-    ctx,
-    overrides.layerNotes ?? [],
-    overrides.scaleTrack ?? [],
-    overrides.timeSignatureTrack ?? [],
-    overrides.activeLayerId,
-  );
+export function makeGeneratorContext(overrides: { activeLayerId?: string } = {}): GeneratorContext {
+  const ctx = makeCommandContext([], new Set(), { activeLayerId: overrides.activeLayerId });
+  return createGeneratorContext(ctx, [], [], []);
 }
 
 export function makeNoteDraft(

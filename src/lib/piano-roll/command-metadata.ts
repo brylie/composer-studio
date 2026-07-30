@@ -33,18 +33,8 @@ export const DISABLED_REASON_TEXT: Record<string, string> = {
 // GeneratorDescriptor.labelKey/descriptionKey (generators.md §5, §7.4).
 export const GENERATOR_LABELS: Record<string, string> = {
   'pulse-pattern': 'Pulse',
-  'generate-chords': 'Chords',
-  arpeggiate: 'Arpeggiate',
-  'euclidean-rhythm': 'Euclidean',
-  'ostinato-generate': 'Ostinato',
-  'motif-generate': 'Motif',
 };
 
 export const GENERATOR_DESCRIPTIONS: Record<string, string> = {
   'pulse-pattern': 'A regular rhythmic pulse you can bound, voice, and vary',
-  'generate-chords': 'Voice-led chords from the chord track or a selection',
-  arpeggiate: 'A chord arpeggiated through a Euclidean rhythm gate',
-  'euclidean-rhythm': 'An evenly-spread Euclidean onset pattern',
-  'ostinato-generate': 'A repeating cell that can follow the scale or chord',
-  'motif-generate': 'A short contoured melodic cell, repeated and varied',
 };
