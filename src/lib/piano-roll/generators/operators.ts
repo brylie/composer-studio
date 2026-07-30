@@ -9,8 +9,14 @@
 // module chain, reroll/locks, Recompute) end to end without reaching into
 // Phase D's assigned catalog.
 
-import { MAX_MIDI, MIN_DURATION_BEATS, MIN_MIDI } from '../types.js';
-import { clampMidi, clampToPitchBounds, clampUnit, clampVelocity } from './operator-utils.js';
+import { MAX_MIDI, MIN_MIDI } from '../types.js';
+import {
+  clampMidi,
+  clampToPitchBounds,
+  clampUnit,
+  clampVelocity,
+  gatedDuration,
+} from './operator-utils.js';
 import { arpeggiateOperator } from './operators-arpeggiate.js';
 import {
   chordSourceOperator,
@@ -20,7 +26,7 @@ import {
 import { motifGenerateOperator } from './operators-motif.js';
 import { ostinatoGenerateOperator } from './operators-ostinato.js';
 import { euclideanGateOperator, euclideanSourceOperator } from './operators-rhythm.js';
-import { createSeededRandom, deriveSeed } from './random.js';
+import { dimensionRandom } from './random.js';
 import type {
   GeneratedNoteDraft,
   GeneratorOperatorDescriptor,
@@ -84,13 +90,7 @@ export const pulseSourceOperator: GeneratorOperatorDescriptor = {
     const gate = clampUnit(Number(request.params.gate ?? 0.8));
     const restProbability = clampUnit(Number(request.params.restProbability ?? 0));
 
-    const rhythmSeed = deriveSeed(
-      variation.seed,
-      variation.locks.rhythm ? 0 : variation.generation,
-      'rhythm',
-      nodeId,
-    );
-    const random = createSeededRandom(rhythmSeed);
+    const random = dimensionRandom(variation, nodeId, 'rhythm');
 
     // Iterates by onset start rather than a precomputed `floor(span /
     // stepBeats)` step count — that undercounts whenever the span isn't an
@@ -108,10 +108,7 @@ export const pulseSourceOperator: GeneratorOperatorDescriptor = {
       startBeat += stepBeats, i++
     ) {
       if (restProbability > 0 && random() < restProbability) continue;
-      const gateDuration = Math.max(MIN_DURATION_BEATS, stepBeats * gate);
-      const durationBeats = bounds.allowTail
-        ? gateDuration
-        : Math.min(gateDuration, bounds.time.endBeat - startBeat);
+      const durationBeats = gatedDuration(stepBeats * gate, startBeat, bounds);
       events.push({
         startBeat,
         durationBeats,
@@ -172,13 +169,7 @@ export const pulseRenderNotesOperator: GeneratorOperatorDescriptor = {
     const baseVelocity = clampVelocity(Number(request.params.velocity ?? 100));
     const velocityVariation = clampUnit(Number(request.params.velocityVariation ?? 0));
 
-    const dynamicsSeed = deriveSeed(
-      variation.seed,
-      variation.locks.dynamics ? 0 : variation.generation,
-      'dynamics',
-      nodeId,
-    );
-    const random = createSeededRandom(dynamicsSeed);
+    const random = dimensionRandom(variation, nodeId, 'dynamics');
 
     const notes: GeneratedNoteDraft[] = events.map((event, i) => {
       const jitter =

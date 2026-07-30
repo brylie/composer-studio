@@ -9,16 +9,8 @@
 
 import { MIN_DURATION_BEATS } from '../types.js';
 import { euclideanPattern } from './euclidean.js';
-import { clampUnit } from './operator-utils.js';
+import { clampPulses, clampSteps, clampUnit, gatedDuration } from './operator-utils.js';
 import type { EventPlan, GeneratorOperatorDescriptor, RhythmPlan } from './types.js';
-
-function clampSteps(value: unknown, fallback: number): number {
-  return Math.max(1, Math.round(Number(value ?? fallback)));
-}
-
-function clampPulses(value: unknown, steps: number, fallback: number): number {
-  return Math.max(0, Math.min(steps, Math.round(Number(value ?? fallback))));
-}
 
 // ── euclidean-source (generators.md §9.1) ───────────────────────────────────
 
@@ -76,10 +68,7 @@ export const euclideanSourceOperator: GeneratorOperatorDescriptor = {
       startBeat += stepBeats, i++
     ) {
       if (pattern.length === 0 || !pattern[i % pattern.length]) continue;
-      const gateDuration = Math.max(MIN_DURATION_BEATS, stepBeats * gate);
-      const durationBeats = bounds.allowTail
-        ? gateDuration
-        : Math.min(gateDuration, bounds.time.endBeat - startBeat);
+      const durationBeats = gatedDuration(stepBeats * gate, startBeat, bounds);
       events.push({ startBeat, durationBeats, accent: i % steps === 0 ? 1 : 0.7 });
     }
 
@@ -140,21 +129,16 @@ export const euclideanGateOperator: GeneratorOperatorDescriptor = {
     const gateLength = clampUnit(Number(params.gateLength ?? 0.8));
     const pattern = euclideanPattern(steps, pulses, rotation);
 
-    const events: EventPlan['events'] =
-      pattern.length === 0
-        ? []
-        : sourceEvents
-            .filter((_, i) => pattern[i % pattern.length])
-            .map((event) => {
-              const gated = Math.max(MIN_DURATION_BEATS, event.durationBeats * gateLength);
-              const durationBeats = bounds.allowTail
-                ? gated
-                : Math.min(
-                    gated,
-                    Math.max(MIN_DURATION_BEATS, bounds.time.endBeat - event.startBeat),
-                  );
-              return { ...event, durationBeats };
-            });
+    const events: EventPlan['events'] = [];
+    for (let i = 0; i < sourceEvents.length && pattern.length > 0; i++) {
+      if (!pattern[i % pattern.length]) continue;
+      const event = sourceEvents[i];
+      const gated = Math.max(MIN_DURATION_BEATS, event.durationBeats * gateLength);
+      const durationBeats = bounds.allowTail
+        ? gated
+        : Math.min(gated, Math.max(MIN_DURATION_BEATS, bounds.time.endBeat - event.startBeat));
+      events.push({ ...event, durationBeats });
+    }
 
     return {
       events: { kind: 'events', bounds, diagnostics: [], events } satisfies EventPlan,

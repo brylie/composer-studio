@@ -258,6 +258,22 @@ export function notesInPitchClassRange(
   return notes;
 }
 
+/** Shared by nearestScaleTone/scaleDegreeToMidi so a caller that already has the pitch-class set doesn't recompute it via getScale(). */
+function nearestToneInPitchClasses(
+  pitchClasses: ReadonlySet<number>,
+  midi: number,
+  direction: 'up' | 'down',
+): number | null {
+  if (pitchClasses.size === 0) return null;
+  const step = direction === 'up' ? 1 : -1;
+  let candidate = midi;
+  for (let i = 0; i <= 12; i++) {
+    if (pitchClasses.has(((candidate % 12) + 12) % 12)) return candidate;
+    candidate += step;
+  }
+  return null; // unreachable when pitchClasses.size > 0, kept defensive rather than a non-null assertion
+}
+
 /**
  * The nearest scale-tone MIDI note to `midi` in the given direction,
  * inclusive of `midi` itself. Bespoke rather than a Tonal primitive: Tonal
@@ -272,15 +288,7 @@ export function nearestScaleTone(
   midi: number,
   direction: 'up' | 'down',
 ): number | null {
-  const pitchClasses = pitchClassesForScaleEvent(root, mode);
-  if (pitchClasses.size === 0) return null;
-  const step = direction === 'up' ? 1 : -1;
-  let candidate = midi;
-  for (let i = 0; i <= 12; i++) {
-    if (pitchClasses.has(((candidate % 12) + 12) % 12)) return candidate;
-    candidate += step;
-  }
-  return null; // unreachable when pitchClasses.size > 0, kept defensive rather than a non-null assertion
+  return nearestToneInPitchClasses(pitchClassesForScaleEvent(root, mode), midi, direction);
 }
 
 /**
@@ -299,7 +307,7 @@ export function scaleDegreeToMidi(
 ): number | null {
   const pitchClasses = pitchClassesForScaleEvent(root, mode);
   if (pitchClasses.size === 0) return null;
-  const anchor = nearestScaleTone(root, mode, anchorMidi, 'up');
+  const anchor = nearestToneInPitchClasses(pitchClasses, anchorMidi, 'up');
   if (anchor === null) return null;
   let midi: number = anchor;
   let remaining = degree;
