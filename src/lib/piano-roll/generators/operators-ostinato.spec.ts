@@ -33,10 +33,13 @@ describe('ostinatoGenerateOperator', () => {
     );
     const plan = result.notes as NotePlan;
     expect(plan.notes.length).toBeGreaterThan(0);
-    // Every repeat's first note starts on a patternLengthBeats-aligned beat.
-    const firstNoteStarts = [...new Set(plan.notes.map((n) => n.startBeat % 2))];
-    for (const offset of firstNoteStarts) {
-      expect(offset).toBeGreaterThanOrEqual(0);
+    // Every repeat's first note starts exactly on a patternLengthBeats-aligned beat.
+    const patternLengthBeats = 2;
+    for (let repeatStart = 0; repeatStart < 8; repeatStart += patternLengthBeats) {
+      const firstNoteInRepeat = plan.notes
+        .filter((n) => n.startBeat >= repeatStart && n.startBeat < repeatStart + patternLengthBeats)
+        .reduce((min, n) => Math.min(min, n.startBeat), Infinity);
+      expect(firstNoteInRepeat).toBe(repeatStart);
     }
   });
 

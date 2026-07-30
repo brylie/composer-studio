@@ -51,6 +51,11 @@ function orderPitches(
       }
       return shuffled;
     }
+    default:
+      // Malformed recipe data (e.g. an unrecognized pattern value) falls
+      // back to 'up' rather than returning undefined — same defensive style
+      // as operators-harmony.ts's asOctaveRange.
+      return ascending;
   }
 }
 

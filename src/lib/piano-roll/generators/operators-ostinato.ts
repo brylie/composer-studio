@@ -49,7 +49,7 @@ function buildCellFromSelection(
   patternLengthBeats: number,
 ): CellNote[] {
   if (notes.length === 0) return [];
-  const minStart = Math.min(...notes.map((n) => n.startBeat));
+  const minStart = notes.reduce((min, n) => Math.min(min, n.startBeat), Infinity);
   return notes
     .map((n) => ({
       offsetBeat: n.startBeat - minStart,

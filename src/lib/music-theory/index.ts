@@ -305,6 +305,7 @@ export function scaleDegreeToMidi(
   degree: number,
   anchorMidi: number,
 ): number | null {
+  if (!Number.isInteger(degree)) return null;
   const pitchClasses = pitchClassesForScaleEvent(root, mode);
   if (pitchClasses.size === 0) return null;
   const anchor = nearestToneInPitchClasses(pitchClasses, anchorMidi, 'up');

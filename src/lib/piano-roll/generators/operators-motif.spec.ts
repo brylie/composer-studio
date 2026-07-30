@@ -93,7 +93,7 @@ describe('motifGenerateOperator', () => {
     }
   });
 
-  it('anchors on the selection median pitch when source is selection-derived', () => {
+  it('anchors on the selection mean pitch when source is selection-derived', () => {
     const ctx = makeGeneratorContext({
       allNotes: [
         makeNote({ id: 'a', startBeat: 0, midiNote: 72 }),
@@ -119,7 +119,7 @@ describe('motifGenerateOperator', () => {
     const notes = (result.notes as NotePlan).notes;
     expect(notes.length).toBeGreaterThan(0);
     // The first (lowest-degree) note should land near the selection's own
-    // register (median ~73), not the default bounds-center anchor.
+    // register (mean ~73), not the default bounds-center anchor.
     expect(notes[0].midiNote).toBeGreaterThan(65);
   });
 

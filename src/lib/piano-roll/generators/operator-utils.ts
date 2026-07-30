@@ -25,12 +25,14 @@ export function clampToPitchBounds(midiNote: number, bounds: GeneratorBounds): n
 
 /** A Euclidean pattern's step count, clamped to at least one step. */
 export function clampSteps(value: unknown, fallback: number): number {
-  return Math.max(1, Math.round(Number(value ?? fallback)));
+  const num = Number(value ?? fallback);
+  return Math.max(1, Math.round(Number.isFinite(num) ? num : fallback));
 }
 
 /** A Euclidean pattern's pulse count, clamped to `[0, steps]`. */
 export function clampPulses(value: unknown, steps: number, fallback: number): number {
-  return Math.max(0, Math.min(steps, Math.round(Number(value ?? fallback))));
+  const num = Number(value ?? fallback);
+  return Math.max(0, Math.min(steps, Math.round(Number.isFinite(num) ? num : fallback)));
 }
 
 /**

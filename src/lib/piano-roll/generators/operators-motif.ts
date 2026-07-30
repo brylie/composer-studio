@@ -47,10 +47,10 @@ function buildContourDegrees(
         degrees.push(-i);
         break;
       case 'arch':
-        degrees.push(i <= half ? i : eventCount - 1 - i);
+        degrees.push(i <= half ? i : eventCount - i);
         break;
       case 'valley':
-        degrees.push(i <= half ? -i : -(eventCount - 1 - i));
+        degrees.push(i <= half ? -i : -(eventCount - i));
         break;
       case 'mixed':
         degrees.push(Math.round((random() * 2 - 1) * 3));

@@ -35,7 +35,8 @@ export function euclideanPattern(steps: number, pulses: number, rotation: number
     }
   }
 
-  const shift = ((Math.floor(rotation) % stepCount) + stepCount) % stepCount;
+  const safeRotation = Number.isFinite(rotation) ? rotation : 0;
+  const shift = ((Math.floor(safeRotation) % stepCount) + stepCount) % stepCount;
   if (shift === 0) return base;
   return base.map((_, i) => base[(i + shift) % stepCount]);
 }
