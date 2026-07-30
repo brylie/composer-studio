@@ -1,9 +1,11 @@
 <script lang="ts">
   import { MediaQuery } from 'svelte/reactivity';
-  import { COMMAND_LABELS } from './command-metadata.js';
+  import { COMMAND_LABELS, GENERATOR_LABELS } from './command-metadata.js';
   import { commandRegistry } from './commands/index.js';
   import type { CommandDescriptor } from './commands/types.js';
   import { getEditorState } from './context.svelte.js';
+  import GeneratorBrowser from './GeneratorBrowser.svelte';
+  import type { GeneratorDescriptor } from './generators/types.js';
   import OverlayShell from './OverlayShell.svelte';
   import RibbonPanel from './RibbonPanel.svelte';
 
@@ -55,6 +57,19 @@
     const executed = store.executeCommand(activeCommandId, params);
     if (executed) closeParamsDrawer();
   }
+
+  // ── Generator browser (generators.md §7.4) ─────────────────────────────
+  let generatorBrowserOpen = $state(false);
+
+  function startGenerator(descriptor: GeneratorDescriptor) {
+    store.startGeneratorSessionFromDescriptor(
+      descriptor,
+      GENERATOR_LABELS[descriptor.id] ?? descriptor.id,
+    );
+    generatorBrowserOpen = false;
+    ribbonUi.activeTab = 'generator-session';
+    if (isMobile.current) ribbonUi.ribbonOpen = false;
+  }
 </script>
 
 {#if isMobile.current}
@@ -63,11 +78,28 @@
     title="Commands"
     onclose={() => (ribbonUi.ribbonOpen = false)}
   >
-    <RibbonPanel sheet onOpenCommand={openCommand} />
+    <RibbonPanel
+      sheet
+      onOpenCommand={openCommand}
+      onStartGenerator={startGenerator}
+      onBrowseGenerators={() => (generatorBrowserOpen = true)}
+    />
   </OverlayShell>
 {:else if ribbonUi.ribbonOpen}
-  <RibbonPanel onOpenCommand={openCommand} />
+  <RibbonPanel
+    onOpenCommand={openCommand}
+    onStartGenerator={startGenerator}
+    onBrowseGenerators={() => (generatorBrowserOpen = true)}
+  />
 {/if}
+
+<OverlayShell
+  open={generatorBrowserOpen}
+  title="Browse generators"
+  onclose={() => (generatorBrowserOpen = false)}
+>
+  <GeneratorBrowser onSelect={startGenerator} />
+</OverlayShell>
 
 <OverlayShell
   open={ribbonUi.paramsDrawerOpen && activeCommand !== null}

@@ -34,6 +34,7 @@ import {
 } from './generators/session.js';
 import type {
   GeneratorBounds,
+  GeneratorDescriptor,
   GeneratorDiagnostic,
   GeneratorRecipe,
   VariationLocks,
@@ -400,6 +401,27 @@ export function createStore() {
 
   function startGeneratorSession(options: CreateGeneratorSessionOptions) {
     _generatorSession = evaluateGeneratorSession(createGeneratorSession(options));
+  }
+
+  /**
+   * Starts a session from a generator-browser catalog entry (generators.md
+   * §7.4's "dropping a starter creates a session"): resolves the descriptor's
+   * default bounds/recipe against the target layer's own GeneratorContext,
+   * rather than the currently-active layer's, so starting a generator on a
+   * non-active layer still evaluates against that layer's own notes.
+   */
+  function startGeneratorSessionFromDescriptor(
+    descriptor: GeneratorDescriptor,
+    name: string,
+    targetLayerId: string = activeLayerId,
+  ) {
+    const ctx = generatorContextFor(targetLayerId);
+    startGeneratorSession({
+      targetLayerId,
+      name,
+      bounds: descriptor.getDefaultBounds(ctx),
+      recipe: descriptor.createDefaultRecipe(ctx),
+    });
   }
 
   /** Recompute (generators.md §6.2) — explicitly re-evaluates against the current context, whether or not the session is currently marked stale. */
@@ -1123,6 +1145,11 @@ export function createStore() {
       return generatorSessionView;
     },
 
+    /** The active session's GeneratorContext (null when no session is active) — for chain-edit.ts's insert/reset actions, which need it to compute an operator's default params. */
+    get generatorContext() {
+      return _generatorSession ? generatorContextFor(_generatorSession.targetLayerId) : null;
+    },
+
     /** Diagnostics from the most recent evaluation attempt, including a failed one's (generators.md §6.2). */
     get generatorDiagnostics() {
       return _generatorDiagnostics;
@@ -1186,6 +1213,7 @@ export function createStore() {
     applyCommandResult,
     executeCommand,
     startGeneratorSession,
+    startGeneratorSessionFromDescriptor,
     recomputeGeneratorSession,
     rerollGeneratorSession,
     stepGeneratorVariation,

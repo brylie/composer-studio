@@ -106,6 +106,21 @@
       { tag: 'line', x1: 3, y1: 6.5, x2: 10, y2: 6.5 },
       { tag: 'line', x1: 3, y1: 9, x2: 10, y2: 9 },
     ],
+
+    // ── Generator icons (generators.md §18 Phase C) ──
+    pulse: [{ tag: 'path', d: 'M1 6.5H3.5L5 2L8 11L9.5 6.5H12' }],
+    refresh: [
+      { tag: 'path', d: 'M2.2 6.5A4.5 4.5 0 1 1 3.7 9.8' },
+      { tag: 'path', d: 'M1.3 4.3L2.2 6.5L4.4 5.8' },
+    ],
+    'step-back': [
+      { tag: 'path', d: 'M9.5 2.5L4.5 6.5L9.5 10.5Z', fill: 'currentColor' },
+      { tag: 'line', x1: 3, y1: 2, x2: 3, y2: 11 },
+    ],
+    'step-forward': [
+      { tag: 'path', d: 'M3.5 2.5L8.5 6.5L3.5 10.5Z', fill: 'currentColor' },
+      { tag: 'line', x1: 10, y1: 2, x2: 10, y2: 11 },
+    ],
   };
 </script>
 

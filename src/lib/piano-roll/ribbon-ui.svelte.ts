@@ -1,7 +1,10 @@
 // Application state — presentation-only ribbon/overlay UI state, distinct from
 // document state (store.svelte.ts). See state-ownership.md and ribbon.md#state-ownership.
 
-export type RibbonTabId = 'transform' | 'generate';
+// 'generator-session' is a contextual tab (generators.md §7.5) — only shown
+// while a generator session is active, exposing session-level actions
+// instead of the ordinary command groups.
+export type RibbonTabId = 'transform' | 'generate' | 'generator-session';
 
 export interface RibbonUiState {
   activeTab: RibbonTabId;

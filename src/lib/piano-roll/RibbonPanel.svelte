@@ -38,23 +38,39 @@
     COMMAND_DESCRIPTIONS,
     COMMAND_LABELS,
     DISABLED_REASON_TEXT,
+    GENERATOR_DESCRIPTIONS,
+    GENERATOR_LABELS,
   } from './command-metadata.js';
   import { commandRegistry } from './commands/index.js';
   import type { CommandDescriptor } from './commands/types.js';
   import { getEditorState } from './context.svelte.js';
+  import { generatorCatalog } from './generators/catalog.js';
+  import type { GeneratorDescriptor } from './generators/types.js';
   import Icon from './Icon.svelte';
   import type { RibbonTabId } from './ribbon-ui.svelte.js';
 
   interface Props {
     sheet?: boolean;
     onOpenCommand: (command: CommandDescriptor) => void;
+    onStartGenerator: (descriptor: GeneratorDescriptor) => void;
+    onBrowseGenerators: () => void;
   }
 
-  const { sheet = false, onOpenCommand }: Props = $props();
+  const { sheet = false, onOpenCommand, onStartGenerator, onBrowseGenerators }: Props = $props();
 
   const { store, ribbonUi } = getEditorState();
 
   const commandsById = $derived(new Map(commandRegistry.map((c) => [c.id, c])));
+
+  // The contextual 'generator-session' tab (generators.md §7.5) only exists
+  // while a session is active — appended dynamically rather than living in
+  // the static RIBBON_TABS list above.
+  const visibleTabs = $derived([
+    ...RIBBON_TABS,
+    ...(store.generatorSession
+      ? [{ id: 'generator-session' as const, label: 'Generator', groups: [] }]
+      : []),
+  ]);
 
   function groupCommands(group: RibbonGroup): CommandDescriptor[] {
     return group.commandIds
@@ -85,7 +101,7 @@
 
 <div class="ribbon" class:ribbon-sheet={sheet} role="toolbar" aria-label="Command ribbon">
   <div class="tabs" role="tablist" aria-label="Ribbon tabs">
-    {#each RIBBON_TABS as tab (tab.id)}
+    {#each visibleTabs as tab (tab.id)}
       <button
         class="tab"
         role="tab"
@@ -102,7 +118,7 @@
     {/each}
   </div>
 
-  {#each RIBBON_TABS as tab (tab.id)}
+  {#each visibleTabs as tab (tab.id)}
     {#if ribbonUi.activeTab === tab.id}
       <div
         class="groups"
@@ -110,36 +126,132 @@
         id="ribbon-panel-{tab.id}"
         aria-labelledby="ribbon-tab-{tab.id}"
       >
-        {#each tab.groups as group (group.id)}
-          {@const commands = groupCommands(group)}
-          {#if commands.length > 0}
+        {#if tab.id === 'generator-session' && store.generatorSession}
+          {@const session = store.generatorSession}
+          <div class="group">
+            <span class="group-label">Session</span>
+            <div class="group-commands">
+              <button
+                class="command-btn"
+                onclick={() => {
+                  store.recomputeGeneratorSession();
+                }}
+              >
+                <Icon name="refresh" />
+                <span class="command-label">Recompute</span>
+              </button>
+              <button
+                class="command-btn"
+                onclick={() => {
+                  store.rerollGeneratorSession();
+                }}
+              >
+                <Icon name="dice" />
+                <span class="command-label">Reroll</span>
+              </button>
+              <button
+                class="command-btn"
+                disabled={session.history.index <= 0}
+                onclick={() => {
+                  store.stepGeneratorVariation('previous');
+                }}
+              >
+                <Icon name="step-back" />
+                <span class="command-label">Previous</span>
+              </button>
+              <button
+                class="command-btn"
+                disabled={session.history.index >= session.history.checkpoints.length - 1}
+                onclick={() => {
+                  store.stepGeneratorVariation('next');
+                }}
+              >
+                <Icon name="step-forward" />
+                <span class="command-label">Next</span>
+              </button>
+              <button
+                class="command-btn"
+                onclick={() => {
+                  store.applyGeneratorSession();
+                }}
+              >
+                <Icon name="plus" />
+                <span class="command-label">Apply</span>
+              </button>
+              <button
+                class="command-btn"
+                onclick={() => {
+                  store.cancelGeneratorSession();
+                }}
+              >
+                <Icon name="close" />
+                <span class="command-label">Cancel</span>
+              </button>
+            </div>
+          </div>
+        {:else}
+          {#each tab.groups as group (group.id)}
+            {@const commands = groupCommands(group)}
+            {#if commands.length > 0}
+              <div class="group">
+                <span class="group-label">{group.label}</span>
+                <div class="group-commands" {@attach scrollFade}>
+                  {#each commands as command (command.id)}
+                    {@const isApplicable = command.isApplicable(store.commandContext)}
+                    {@const reasonKey = !isApplicable
+                      ? command.getDisabledReasonKey?.(store.commandContext)
+                      : undefined}
+                    <button
+                      class="command-btn"
+                      onclick={() => {
+                        onOpenCommand(command);
+                      }}
+                      disabled={!isApplicable}
+                      aria-label={COMMAND_LABELS[command.id] ?? command.id}
+                      title={!isApplicable && reasonKey
+                        ? (DISABLED_REASON_TEXT[reasonKey] ?? undefined)
+                        : (COMMAND_DESCRIPTIONS[command.id] ?? undefined)}
+                    >
+                      <Icon name={command.icon} />
+                      <span class="command-label">{COMMAND_LABELS[command.id] ?? command.id}</span>
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          {/each}
+
+          {#if tab.id === 'generate'}
             <div class="group">
-              <span class="group-label">{group.label}</span>
+              <span class="group-label">Generators</span>
               <div class="group-commands" {@attach scrollFade}>
-                {#each commands as command (command.id)}
-                  {@const isApplicable = command.isApplicable(store.commandContext)}
-                  {@const reasonKey = !isApplicable
-                    ? command.getDisabledReasonKey?.(store.commandContext)
-                    : undefined}
+                {#each generatorCatalog as descriptor (descriptor.id)}
                   <button
                     class="command-btn"
                     onclick={() => {
-                      onOpenCommand(command);
+                      onStartGenerator(descriptor);
                     }}
-                    disabled={!isApplicable}
-                    aria-label={COMMAND_LABELS[command.id] ?? command.id}
-                    title={!isApplicable && reasonKey
-                      ? (DISABLED_REASON_TEXT[reasonKey] ?? undefined)
-                      : (COMMAND_DESCRIPTIONS[command.id] ?? undefined)}
+                    aria-label={GENERATOR_LABELS[descriptor.id] ?? descriptor.id}
+                    title={GENERATOR_DESCRIPTIONS[descriptor.id]}
                   >
-                    <Icon name={command.icon} />
-                    <span class="command-label">{COMMAND_LABELS[command.id] ?? command.id}</span>
+                    <Icon name={descriptor.icon} />
+                    <span class="command-label"
+                      >{GENERATOR_LABELS[descriptor.id] ?? descriptor.id}</span
+                    >
                   </button>
                 {/each}
+                <button
+                  class="command-btn"
+                  onclick={onBrowseGenerators}
+                  aria-label="Browse generators"
+                >
+                  <Icon name="layers" />
+                  <span class="command-label">Browse…</span>
+                </button>
               </div>
             </div>
           {/if}
-        {/each}
+        {/if}
       </div>
     {/if}
   {/each}

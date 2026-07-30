@@ -8,6 +8,7 @@
   import { getEditorState } from './context.svelte.js';
   const { store, ribbonUi } = getEditorState();
   import CommandRibbon from './CommandRibbon.svelte';
+  import GeneratorInspector from './GeneratorInspector.svelte';
   import { createLaneEditor } from './lane-editor.svelte.js';
   import EventTrackLane from './EventTrackLane.svelte';
   import LabelEventEditor from './LabelEventEditor.svelte';
@@ -375,6 +376,11 @@
         </div>
       {/if}
     </div>
+
+    <!-- Generator inspector (generators.md §1.1, §7.1) — a persistent,
+         non-modal sidebar next to the grid while a session is active; never
+         an OverlayShell drawer, per generators.md §7.8. -->
+    <GeneratorInspector />
   </div>
 
   <OverlayShell

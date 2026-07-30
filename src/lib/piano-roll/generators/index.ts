@@ -1,5 +1,7 @@
 // Generator domain and evaluation infrastructure (generators.md §18 Phases A-B).
 
+export * from './catalog.js';
+export * from './chain-edit.js';
 export * from './context.js';
 export * from './evaluator.js';
 export * from './operators.js';

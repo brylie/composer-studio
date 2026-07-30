@@ -5,6 +5,7 @@
 // staleness) now live in session.ts (Phase B). The catalog-facing
 // GeneratorDescriptor is Phase C/D and still deliberately not defined here.
 
+import type { CommandDescriptorBase, ParamField } from '../commands/types.js';
 import type { ScaleEvent, TimeSignatureEvent } from '../timeline.js';
 import type { CommandContext, Note } from '../types.js';
 
@@ -183,6 +184,17 @@ export interface GeneratorOperatorDescriptor<
   inputs: Record<string, PlanPort>;
   outputs: Record<string, PlanPort>;
   contextDependencies?: GeneratorContextDependency[];
+  /**
+   * Reuses commands/types.ts's ParamField union (generators.md §8: "the
+   * current ParamField union can remain for ordinary controls") so the
+   * generator inspector's module detail editor renders the same field kinds
+   * — number/range/select/boolean/number-range — as the command ribbon's
+   * params drawer, instead of a second parallel field-type system. Omitted
+   * for an operator with no user-facing parameters.
+   */
+  paramFields?: ParamField[];
+  /** A short one-line musical summary for the module's card (generators.md §7.2, e.g. "5/8 pulses"). */
+  summary?(params: TParams): string;
   getDefaultParams(ctx: GeneratorContext): TParams;
   process(
     ctx: GeneratorContext,
@@ -239,4 +251,23 @@ export interface GeneratorResult {
     nodeId: string;
     outputs: Record<string, MusicPlan | MusicPlan[]>;
   }[];
+}
+
+// ── Generator catalog entry (generators.md §5, §7.4, §9) ───────────────────
+
+/**
+ * A generator-browser/ribbon catalog entry (generators.md §5). Reuses
+ * CommandDescriptorBase for label/icon/applicability/discovery metadata, but
+ * is deliberately not itself a CommandDescriptor: it has no run()/effect(),
+ * because starting a generator session (getDefaultBounds +
+ * createDefaultRecipe, then evaluateGeneratorRecipe through the session
+ * layer) is a different application flow than a one-shot note mutation.
+ */
+export interface GeneratorDescriptor extends CommandDescriptorBase {
+  version: number;
+  category: 'generate';
+  family: GeneratorFamily;
+  tags?: string[];
+  getDefaultBounds(ctx: GeneratorContext): GeneratorBounds;
+  createDefaultRecipe(ctx: GeneratorContext): GeneratorRecipe;
 }
