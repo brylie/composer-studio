@@ -112,6 +112,21 @@ describe('removeNode', () => {
     expect(result.error).not.toBeNull();
     expect(result.recipe).toBe(recipe);
   });
+
+  it('is a silent no-op for an id that matches no node, even on a single-node recipe', () => {
+    const recipe: GeneratorRecipe = {
+      id: 'r',
+      version: 1,
+      nodes: [
+        { id: 'source', operatorId: 'source', operatorVersion: 1, params: {}, enabled: true },
+      ],
+      edges: [],
+      output: { nodeId: 'source', port: 'out' },
+    };
+    const result = removeNode(recipe, 'does-not-exist', operators);
+    expect(result.error).toBeNull();
+    expect(result.recipe).toBe(recipe);
+  });
 });
 
 describe('duplicateNode', () => {
@@ -167,6 +182,13 @@ describe('insertNode', () => {
   it('rejects an incompatible module without mutating the recipe', () => {
     const recipe = baseRecipe();
     const result = insertNode(recipe, 'harmony-only', ctx, operators);
+    expect(result.error).not.toBeNull();
+    expect(result.recipe).toBe(recipe);
+  });
+
+  it('rejects an explicit anchor id that does not exist, rather than falling back to appending at the end', () => {
+    const recipe = baseRecipe();
+    const result = insertNode(recipe, 'transpose-a', ctx, operators, 'does-not-exist');
     expect(result.error).not.toBeNull();
     expect(result.recipe).toBe(recipe);
   });

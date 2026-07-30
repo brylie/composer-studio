@@ -59,6 +59,7 @@ export const pulseSourceOperator: GeneratorOperatorDescriptor = {
   inputs: {},
   outputs: { rhythm: { kind: 'rhythm' } },
   contextDependencies: [],
+  variationDimensions: ['rhythm'],
   paramFields: [
     {
       key: 'stepBeats',
@@ -98,14 +99,29 @@ export const pulseSourceOperator: GeneratorOperatorDescriptor = {
     );
     const random = createSeededRandom(rhythmSeed);
 
-    const span = bounds.time.endBeat - bounds.time.startBeat;
-    const stepCount = Math.max(0, Math.floor(span / stepBeats));
+    // Iterates by onset start rather than a precomputed `floor(span /
+    // stepBeats)` step count — that undercounts whenever the span isn't an
+    // exact multiple of stepBeats (e.g. bounds 0–3.5 with a 1-beat step has
+    // a valid onset at beat 3, which floor(3.5) = 3 steps would have
+    // skipped). Each onset's duration is truncated to the remaining span
+    // when allowTail is false, so a trailing partial step never produces an
+    // onset that ends past bounds.time.endBeat.
     const events: RhythmPlan['events'] = [];
-    for (let i = 0; i < stepCount; i++) {
+    const epsilon = 1e-9;
+    let i = 0;
+    for (
+      let startBeat = bounds.time.startBeat;
+      startBeat < bounds.time.endBeat - epsilon;
+      startBeat += stepBeats, i++
+    ) {
       if (restProbability > 0 && random() < restProbability) continue;
+      const gateDuration = Math.max(MIN_DURATION_BEATS, stepBeats * gate);
+      const durationBeats = bounds.allowTail
+        ? gateDuration
+        : Math.min(gateDuration, bounds.time.endBeat - startBeat);
       events.push({
-        startBeat: bounds.time.startBeat + i * stepBeats,
-        durationBeats: Math.max(MIN_DURATION_BEATS, stepBeats * gate),
+        startBeat,
+        durationBeats,
         accent: i % 4 === 0 ? 1 : 0.7,
       });
     }
@@ -133,6 +149,7 @@ export const pulseRenderNotesOperator: GeneratorOperatorDescriptor = {
   inputs: { rhythm: { kind: 'rhythm' } },
   outputs: { notes: { kind: 'notes' } },
   contextDependencies: [],
+  variationDimensions: ['dynamics'],
   paramFields: [
     { key: 'midiNote', label: 'Pitch', type: 'number', min: MIN_MIDI, max: MAX_MIDI, default: 60 },
     { key: 'velocity', label: 'Velocity', type: 'number', min: 1, max: 127, default: 100 },

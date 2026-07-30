@@ -195,6 +195,8 @@ export interface GeneratorOperatorDescriptor<
   paramFields?: ParamField[];
   /** A short one-line musical summary for the module's card (generators.md §7.2, e.g. "5/8 pulses"). */
   summary?(params: TParams): string;
+  /** Which VariationLocks dimensions this operator's process() actually seeds randomness for (via deriveSeed) — lets the inspector show only lock chips relevant to the current recipe instead of all six always. Omitted/empty for a deterministic operator. */
+  variationDimensions?: (keyof VariationLocks)[];
   getDefaultParams(ctx: GeneratorContext): TParams;
   process(
     ctx: GeneratorContext,

@@ -47,6 +47,35 @@
     return minMidi <= maxMidi ? { minMidi, maxMidi } : { minMidi: maxMidi, maxMidi: minMidi };
   }
 
+  /**
+   * Translates (not resizes) `bounds` by a beat/row delta, always preserving
+   * both the time span and the pitch span. Clamping the *delta* itself
+   * (rather than clamping each endpoint independently, as the old move
+   * handler did) is what keeps the span intact at a boundary — clamping
+   * minMidi and maxMidi separately can shrink the span instead of just
+   * stopping the drag, e.g. dragging a 12-semitone-tall region up against
+   * MAX_MIDI used to collapse it toward a single pitch.
+   */
+  function translateBounds(
+    bounds: GeneratorBounds,
+    deltaBeats: number,
+    deltaRows: number,
+  ): GeneratorBounds {
+    const span = bounds.time.endBeat - bounds.time.startBeat;
+    const newStart = Math.max(0, bounds.time.startBeat + deltaBeats);
+    const pitchSpan = bounds.pitch.maxMidi - bounds.pitch.minMidi;
+    const clampedDeltaRows = Math.max(
+      bounds.pitch.maxMidi - MAX_MIDI,
+      Math.min(bounds.pitch.minMidi - MIN_MIDI, deltaRows),
+    );
+    const minMidi = bounds.pitch.minMidi - clampedDeltaRows;
+    return {
+      time: { startBeat: newStart, endBeat: newStart + span },
+      pitch: { minMidi, maxMidi: minMidi + pitchSpan },
+      allowTail: bounds.allowTail,
+    };
+  }
+
   function handlePointerMove(e: PointerEvent) {
     if (!dragKind || !dragStartBounds) return;
     const snap = store.snapBeats;
@@ -56,18 +85,7 @@
     const bounds = dragStartBounds;
 
     if (dragKind === 'move') {
-      const span = bounds.time.endBeat - bounds.time.startBeat;
-      const newStart = Math.max(0, bounds.time.startBeat + deltaBeats);
-      const pitchSpan = bounds.pitch.maxMidi - bounds.pitch.minMidi;
-      const { minMidi } = clampPitch(
-        bounds.pitch.minMidi - deltaRows,
-        bounds.pitch.maxMidi - deltaRows,
-      );
-      draftBounds = {
-        time: { startBeat: newStart, endBeat: newStart + span },
-        pitch: { minMidi, maxMidi: Math.min(MAX_MIDI, minMidi + pitchSpan) },
-        allowTail: bounds.allowTail,
-      };
+      draftBounds = translateBounds(bounds, deltaBeats, deltaRows);
     } else if (dragKind === 'resize-left') {
       const newStart = Math.max(
         0,
@@ -110,7 +128,17 @@
     const snap = store.snapBeats;
     let next: GeneratorBounds | null = null;
 
-    if (kind === 'resize-left' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    if (
+      kind === 'move' &&
+      (e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown')
+    ) {
+      const deltaBeats = e.key === 'ArrowLeft' ? -snap : e.key === 'ArrowRight' ? snap : 0;
+      const deltaRows = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0;
+      next = translateBounds(bounds, deltaBeats, deltaRows);
+    } else if (kind === 'resize-left' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       const delta = e.key === 'ArrowLeft' ? -snap : snap;
       const newStart = Math.max(
         0,
@@ -164,6 +192,9 @@
       }}
       onpointermove={handlePointerMove}
       onpointerup={endDrag}
+      onkeydown={(e) => {
+        handleKeydown(e, 'move');
+      }}
     >
       <span class="region-label">
         {session.name}

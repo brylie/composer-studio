@@ -72,6 +72,32 @@ describe('pulseSourceOperator', () => {
     expect((first.rhythm as RhythmPlan).events).toEqual((second.rhythm as RhythmPlan).events);
   });
 
+  it('includes a valid final onset when the span is not an exact multiple of the step size', () => {
+    // 0–3.5 at a 1-beat step has a valid onset at beat 3 (ends exactly at
+    // 3.5) — a naive floor(span / stepBeats) = 3 step count would stop at
+    // beat 2 and miss it.
+    const bounds = makeBounds({ time: { startBeat: 0, endBeat: 3.5 } });
+    const result = pulseSourceOperator.process(
+      ctx,
+      {},
+      pulseRequest({ bounds, params: { gate: 0.5 } }),
+    );
+    const plan = result.rhythm as RhythmPlan;
+    expect(plan.events.map((e) => e.startBeat)).toEqual([0, 1, 2, 3]);
+    expect(plan.events[3].durationBeats).toBeCloseTo(0.5);
+  });
+
+  it('truncates a trailing partial step to the time bounds when allowTail is false', () => {
+    // gate 0.8 would normally produce a 0.8-beat note, but only 0.5 beats
+    // remain before the end bound.
+    const bounds = makeBounds({ time: { startBeat: 0, endBeat: 3.5 }, allowTail: false });
+    const result = pulseSourceOperator.process(ctx, {}, pulseRequest({ bounds }));
+    const plan = result.rhythm as RhythmPlan;
+    const last = plan.events.at(-1);
+    expect(last?.startBeat).toBe(3);
+    expect(last?.durationBeats).toBeCloseTo(0.5);
+  });
+
   it('never emits an onset outside the time bounds', () => {
     const bounds = makeBounds({ time: { startBeat: 2, endBeat: 5 } });
     const result = pulseSourceOperator.process(

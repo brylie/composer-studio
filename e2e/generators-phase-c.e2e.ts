@@ -16,6 +16,20 @@ function committedNotes(page: import('@playwright/test').Page) {
   return page.locator('.note:not(.preview-note)');
 }
 
+/**
+ * A stable per-note signature of the current preview (each note's left/top/
+ * width inline style, which encode start beat, pitch, and duration) — a mere
+ * `.preview-note` *count* can't distinguish "the pattern changed" from "the
+ * same pattern happened to reroll to itself," and a reroll that only moves
+ * rests around wouldn't necessarily change the count at all.
+ */
+async function previewSignature(page: import('@playwright/test').Page): Promise<string[]> {
+  const styles = await page
+    .locator('.preview-note')
+    .evaluateAll((els) => els.map((el) => el.getAttribute('style') ?? ''));
+  return styles.sort();
+}
+
 test.describe('Generators — Phase C session UX', () => {
   test('starting a generator shows a bounded region, live preview notes, and the inspector', async ({
     page,
@@ -87,13 +101,26 @@ test.describe('Generators — Phase C session UX', () => {
     await page.goto('/');
     await startPulseGenerator(page);
     await expect(page.locator('.preview-note').first()).toBeVisible();
+    const previewCount = await page.locator('.preview-note').count();
 
     // Module cards render as ["Pulse" source, "Note renderer"] by default.
     await page.getByRole('button', { name: 'Bypass Note renderer' }).click();
 
     await expect(page.locator('.inspector .status-error')).toBeVisible();
     await expect(page.locator('.diagnostics-list .diagnostic-error').first()).toBeVisible();
-    // The session survives the error (no preview, but no crash) and can be cancelled.
+    // evaluateSession() deliberately keeps the session's last successful
+    // `result` on a failed evaluation (generators.md §6.2) rather than
+    // clearing it, so the pre-bypass preview notes are still exactly what's
+    // rendered here — not zero. That staleness is exactly why Apply must be
+    // disabled in the error state (guarded separately below and in
+    // GeneratorInspector/RibbonPanel), rather than the preview itself
+    // disappearing.
+    await expect(page.locator('.preview-note')).toHaveCount(previewCount);
+    // Apply must not be offered while there's nothing valid to commit — it
+    // would otherwise silently discard the stale preview instead of
+    // applying it (the bug the disabled state above guards against).
+    await expect(page.locator('.inspector').getByRole('button', { name: 'Apply' })).toBeDisabled();
+    // The session survives the error (stale preview, but no crash) and can be cancelled.
     await page.locator('.inspector').getByRole('button', { name: 'Cancel' }).click();
     await expect(page.locator('[aria-label="Generator inspector"]')).toBeHidden();
   });
@@ -113,11 +140,11 @@ test.describe('Generators — Phase C session UX', () => {
     await restField.focus();
     await restField.press('End'); // jumps an <input type="range"> to its max
 
-    const before = await page.locator('.preview-note').count();
+    const before = await previewSignature(page);
 
     await page.locator('.inspector').getByRole('button', { name: 'Reroll' }).click();
 
-    await expect.poll(() => page.locator('.preview-note').count()).not.toBe(before);
+    await expect.poll(() => previewSignature(page)).not.toEqual(before);
     // The session stays open — reroll doesn't Apply or Cancel.
     await expect(page.locator('[aria-label="Generator inspector"]')).toBeVisible();
   });
@@ -155,5 +182,18 @@ test.describe('Generators — Phase C session UX', () => {
     await endHandle.press('ArrowRight');
 
     await expect.poll(() => endBeatField.inputValue()).not.toEqual(before);
+  });
+
+  test('the region body is keyboard-movable, not just its resize handles', async ({ page }) => {
+    await page.goto('/');
+    await startPulseGenerator(page);
+
+    const startBeatField = page.getByRole('spinbutton', { name: 'Start beat', exact: true });
+    const regionBody = page.getByRole('button', { name: 'Move generator region' });
+    await regionBody.focus();
+    const before = await startBeatField.inputValue();
+    await regionBody.press('ArrowRight');
+
+    await expect.poll(() => startBeatField.inputValue()).not.toEqual(before);
   });
 });

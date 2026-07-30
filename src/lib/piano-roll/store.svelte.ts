@@ -399,8 +399,18 @@ export function createStore() {
     return outcome.session;
   }
 
-  function startGeneratorSession(options: CreateGeneratorSessionOptions) {
+  /**
+   * Refuses to start a session while one is already active (generators.md
+   * §4.7's one-session-at-a-time invariant) rather than silently discarding
+   * the in-progress session's bounds/recipe/reroll history — the caller must
+   * Apply or Cancel first. Returns whether a session was actually started,
+   * so UI call sites only update their own state (active tab, browser
+   * visibility, etc.) when a session really did start.
+   */
+  function startGeneratorSession(options: CreateGeneratorSessionOptions): boolean {
+    if (_generatorSession) return false;
     _generatorSession = evaluateGeneratorSession(createGeneratorSession(options));
+    return true;
   }
 
   /**
@@ -414,9 +424,10 @@ export function createStore() {
     descriptor: GeneratorDescriptor,
     name: string,
     targetLayerId: string = activeLayerId,
-  ) {
+  ): boolean {
+    if (_generatorSession) return false;
     const ctx = generatorContextFor(targetLayerId);
-    startGeneratorSession({
+    return startGeneratorSession({
       targetLayerId,
       name,
       bounds: descriptor.getDefaultBounds(ctx),

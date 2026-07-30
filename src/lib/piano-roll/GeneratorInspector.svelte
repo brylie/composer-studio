@@ -22,7 +22,7 @@
   import type { GeneratorBounds, VariationLocks } from './generators/types.js';
   import { MAX_MIDI, MIN_MIDI } from './types.js';
 
-  const { store } = getEditorState();
+  const { store, ribbonUi } = getEditorState();
 
   const session = $derived(store.generatorSession);
 
@@ -44,6 +44,23 @@
   const selectedOperator = $derived(
     selectedNode ? operatorRegistry.get(selectedNode.operatorId) : undefined,
   );
+
+  /** Apply must not be offered for a session with nothing valid to commit — applyGeneratorSession() itself just closes the session in that case, silently discarding the visible preview otherwise (generators.md §6.1 step 5). */
+  const canApply = $derived(
+    !!session?.result && session.status !== 'error' && !!store.layerFor(session.targetLayerId),
+  );
+
+  /** Which lock chips are shown — only dimensions an operator actually in the chain can randomize, rather than always all six (most are inert for the current recipe). */
+  const visibleLockDimensions = $derived.by(() => {
+    if (!session) return [];
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain local lookup, discarded immediately, never read reactively
+    const present = new Set<keyof VariationLocks>();
+    for (const node of session.recipe.nodes) {
+      const operator = operatorRegistry.get(node.operatorId);
+      for (const dim of operator?.variationDimensions ?? []) present.add(dim);
+    }
+    return LOCK_DIMENSIONS.filter((d) => present.has(d.key));
+  });
 
   const LOCK_DIMENSIONS: { key: keyof VariationLocks; label: string }[] = [
     { key: 'rhythm', label: 'Rhythm' },
@@ -72,6 +89,7 @@
 
   function toggleModule(nodeId: string) {
     if (!session) return;
+    chainError = null;
     store.updateGeneratorRecipe(toggleNodeEnabled(session.recipe, nodeId));
   }
 
@@ -108,7 +126,13 @@
 
   function updateParam(nodeId: string, key: string, value: unknown) {
     if (!session) return;
+    chainError = null;
     store.updateGeneratorRecipe(updateNodeParams(session.recipe, nodeId, { [key]: value }));
+  }
+
+  /** After Apply/Cancel closes the session, the contextual ribbon tab disappears from its visible-tabs list — switch off it so the ribbon isn't left pointed at a tab with no matching panel. */
+  function closeSessionTabIfActive() {
+    if (ribbonUi.activeTab === 'generator-session') ribbonUi.activeTab = 'generate';
   }
 
   function updateBounds(patch: Partial<GeneratorBounds['time'] & GeneratorBounds['pitch']>) {
@@ -145,8 +169,11 @@
         <button
           type="button"
           class="apply-btn"
+          disabled={!canApply}
+          title={canApply ? undefined : 'Recompute to a non-error result before applying'}
           onclick={() => {
             store.applyGeneratorSession();
+            closeSessionTabIfActive();
           }}
         >
           Apply
@@ -156,6 +183,7 @@
           class="cancel-btn"
           onclick={() => {
             store.cancelGeneratorSession();
+            closeSessionTabIfActive();
           }}
         >
           Cancel
@@ -213,7 +241,7 @@
         </button>
       </div>
       <div class="locks-grid" role="group" aria-label="Locked dimensions">
-        {#each LOCK_DIMENSIONS as dim (dim.key)}
+        {#each visibleLockDimensions as dim (dim.key)}
           <button
             type="button"
             class="lock-chip"
@@ -380,39 +408,56 @@
               >
                 <Icon name={node.enabled ? 'eye' : 'lock'} />
               </button>
-              <button
-                type="button"
-                class="module-icon-btn"
-                aria-label="Duplicate {operator?.label ?? node.operatorId}"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  duplicateModule(node.id);
-                }}
-              >
-                <Icon name="plus" />
-              </button>
-              <button
-                type="button"
-                class="module-icon-btn"
-                aria-label="Reset {operator?.label ?? node.operatorId} parameters"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  resetModule(node.id);
-                }}
-              >
-                <Icon name="refresh" />
-              </button>
-              <button
-                type="button"
-                class="module-icon-btn danger"
-                aria-label="Remove {operator?.label ?? node.operatorId}"
-                onclick={(e) => {
-                  e.stopPropagation();
-                  removeModule(node.id);
-                }}
-              >
-                <Icon name="trash" />
-              </button>
+              <!-- Duplicate/reset/remove are edited far less often than move/bypass
+                   (generators.md §7.2), so they live behind one overflow
+                   disclosure instead of three permanently-visible buttons. -->
+              <details class="more-menu">
+                <summary
+                  class="module-icon-btn"
+                  aria-label="More actions for {operator?.label ?? node.operatorId}"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  <Icon name="more" />
+                </summary>
+                <div class="more-menu-items" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      duplicateModule(node.id);
+                      e.currentTarget.closest('details')?.removeAttribute('open');
+                    }}
+                  >
+                    <Icon name="plus" /> Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      resetModule(node.id);
+                      e.currentTarget.closest('details')?.removeAttribute('open');
+                    }}
+                  >
+                    <Icon name="refresh" /> Reset
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class="danger"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      removeModule(node.id);
+                      e.currentTarget.closest('details')?.removeAttribute('open');
+                    }}
+                  >
+                    <Icon name="trash" /> Remove
+                  </button>
+                </div>
+              </details>
             </span>
           </div>
         {/each}
@@ -632,8 +677,13 @@
     color: #fff;
   }
 
-  .apply-btn:hover {
+  .apply-btn:hover:not(:disabled) {
     background: #7c7ce8;
+  }
+
+  .apply-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .cancel-btn {
@@ -779,6 +829,7 @@
   }
 
   .module-card {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -855,6 +906,56 @@
   }
 
   .module-icon-btn.danger {
+    color: #d08080;
+  }
+
+  .more-menu {
+    position: relative;
+  }
+
+  .more-menu > summary {
+    list-style: none;
+  }
+
+  .more-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .more-menu-items {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 120px;
+    padding: 4px;
+    border: 1px solid #2a2a45;
+    border-radius: 8px;
+    background: #1c1c30;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  }
+
+  .more-menu-items button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    background: transparent;
+    color: #d0d0f0;
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .more-menu-items button:hover {
+    background: #2a2a4a;
+  }
+
+  .more-menu-items button.danger {
     color: #d08080;
   }
 

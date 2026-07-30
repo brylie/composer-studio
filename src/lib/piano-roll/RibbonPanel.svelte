@@ -72,6 +72,11 @@
       : []),
   ]);
 
+  /** After Apply/Cancel closes the session, the contextual tab disappears from visibleTabs — switch off it so the ribbon isn't left pointed at a tab with no matching panel. */
+  function closeGeneratorSessionTab() {
+    if (ribbonUi.activeTab === 'generator-session') ribbonUi.activeTab = 'generate';
+  }
+
   function groupCommands(group: RibbonGroup): CommandDescriptor[] {
     return group.commandIds
       .map((id) => commandsById.get(id))
@@ -128,6 +133,10 @@
       >
         {#if tab.id === 'generator-session' && store.generatorSession}
           {@const session = store.generatorSession}
+          {@const canApply =
+            !!session.result &&
+            session.status !== 'error' &&
+            !!store.layerFor(session.targetLayerId)}
           <div class="group">
             <span class="group-label">Session</span>
             <div class="group-commands">
@@ -171,8 +180,11 @@
               </button>
               <button
                 class="command-btn"
+                disabled={!canApply}
+                title={canApply ? undefined : 'Recompute to a non-error result before applying'}
                 onclick={() => {
                   store.applyGeneratorSession();
+                  closeGeneratorSessionTab();
                 }}
               >
                 <Icon name="plus" />
@@ -182,6 +194,7 @@
                 class="command-btn"
                 onclick={() => {
                   store.cancelGeneratorSession();
+                  closeGeneratorSessionTab();
                 }}
               >
                 <Icon name="close" />
@@ -222,6 +235,7 @@
           {/each}
 
           {#if tab.id === 'generate'}
+            {@const sessionActive = !!store.generatorSession}
             <div class="group">
               <span class="group-label">Generators</span>
               <div class="group-commands" {@attach scrollFade}>
@@ -231,8 +245,11 @@
                     onclick={() => {
                       onStartGenerator(descriptor);
                     }}
+                    disabled={sessionActive}
                     aria-label={GENERATOR_LABELS[descriptor.id] ?? descriptor.id}
-                    title={GENERATOR_DESCRIPTIONS[descriptor.id]}
+                    title={sessionActive
+                      ? 'Apply or cancel the active generator session first'
+                      : GENERATOR_DESCRIPTIONS[descriptor.id]}
                   >
                     <Icon name={descriptor.icon} />
                     <span class="command-label"
@@ -243,7 +260,11 @@
                 <button
                   class="command-btn"
                   onclick={onBrowseGenerators}
+                  disabled={sessionActive}
                   aria-label="Browse generators"
+                  title={sessionActive
+                    ? 'Apply or cancel the active generator session first'
+                    : undefined}
                 >
                   <Icon name="layers" />
                   <span class="command-label">Browse…</span>

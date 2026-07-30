@@ -62,13 +62,23 @@
   let generatorBrowserOpen = $state(false);
 
   function startGenerator(descriptor: GeneratorDescriptor) {
-    store.startGeneratorSessionFromDescriptor(
+    const started = store.startGeneratorSessionFromDescriptor(
       descriptor,
       GENERATOR_LABELS[descriptor.id] ?? descriptor.id,
     );
+    // A session is already active — the store refused to replace it
+    // (generators.md §4.7). Leave everything as-is rather than closing the
+    // browser or switching tabs for a start that didn't happen.
+    if (!started) return;
     generatorBrowserOpen = false;
     ribbonUi.activeTab = 'generator-session';
     if (isMobile.current) ribbonUi.ribbonOpen = false;
+  }
+
+  /** Closes the mobile ribbon sheet before opening the generator browser overlay — two overlays open together would violate generators.md §7.8's "no modal opens another modal". */
+  function openGeneratorBrowser() {
+    if (isMobile.current) ribbonUi.ribbonOpen = false;
+    generatorBrowserOpen = true;
   }
 </script>
 
@@ -82,7 +92,7 @@
       sheet
       onOpenCommand={openCommand}
       onStartGenerator={startGenerator}
-      onBrowseGenerators={() => (generatorBrowserOpen = true)}
+      onBrowseGenerators={openGeneratorBrowser}
     />
   </OverlayShell>
 {:else if ribbonUi.ribbonOpen}

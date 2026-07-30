@@ -121,6 +121,12 @@
       { tag: 'path', d: 'M3.5 2.5L8.5 6.5L3.5 10.5Z', fill: 'currentColor' },
       { tag: 'line', x1: 10, y1: 2, x2: 10, y2: 11 },
     ],
+    // Overflow ("more actions") glyph: three dots.
+    more: [
+      { tag: 'circle', cx: 2.8, cy: 6.5, r: 1.1, fill: 'currentColor' },
+      { tag: 'circle', cx: 6.5, cy: 6.5, r: 1.1, fill: 'currentColor' },
+      { tag: 'circle', cx: 10.2, cy: 6.5, r: 1.1, fill: 'currentColor' },
+    ],
   };
 </script>
 

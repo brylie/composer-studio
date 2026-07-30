@@ -86,6 +86,12 @@ export function removeNode(
   nodeId: string,
   operators: ReadonlyMap<string, GeneratorOperatorDescriptor>,
 ): ChainEditResult {
+  // An unmatched id removes nothing — a no-op, not the "needs at least one
+  // module" error a single-node recipe would otherwise incorrectly report
+  // for an id that was never going to reduce it below one node.
+  if (!recipe.nodes.some((n) => n.id === nodeId)) {
+    return { recipe, error: null };
+  }
   if (recipe.nodes.length <= 1) {
     return { recipe, error: 'A recipe needs at least one module.' };
   }
@@ -151,6 +157,18 @@ export function insertNode(
   if (!descriptor) {
     return { recipe, error: `Unknown operator "${operatorId}".` };
   }
+  // An explicitly-given anchor that no longer exists (e.g. a stale selection
+  // after a concurrent edit) is rejected rather than silently falling back
+  // to appending at the end — the caller asked to insert after a specific
+  // module, not "somewhere".
+  let insertAt = recipe.nodes.length;
+  if (afterNodeId !== undefined) {
+    const afterIndex = recipe.nodes.findIndex((n) => n.id === afterNodeId);
+    if (afterIndex === -1) {
+      return { recipe, error: `Module "${afterNodeId}" not found.` };
+    }
+    insertAt = afterIndex + 1;
+  }
   const node: GeneratorNodeInstance = {
     id: crypto.randomUUID(),
     operatorId,
@@ -158,10 +176,6 @@ export function insertNode(
     params: descriptor.getDefaultParams(ctx),
     enabled: true,
   };
-  const afterIndex = afterNodeId
-    ? recipe.nodes.findIndex((n) => n.id === afterNodeId)
-    : recipe.nodes.length - 1;
-  const insertAt = afterIndex === -1 ? recipe.nodes.length : afterIndex + 1;
   const nodes = [...recipe.nodes.slice(0, insertAt), node, ...recipe.nodes.slice(insertAt)];
   return rewire(recipe, nodes, operators);
 }
