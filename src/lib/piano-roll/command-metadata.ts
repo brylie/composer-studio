@@ -28,3 +28,13 @@ export const DISABLED_REASON_TEXT: Record<string, string> = {
   'commands.disabled.selectAtLeastOne': 'Select at least one note',
   'commands.disabled.selectAtLeastTwo': 'Select at least two notes',
 };
+
+// Same not-yet-wired-to-Paraglide situation as COMMAND_LABELS above, for
+// GeneratorDescriptor.labelKey/descriptionKey (generators.md §5, §7.4).
+export const GENERATOR_LABELS: Record<string, string> = {
+  'pulse-pattern': 'Pulse',
+};
+
+export const GENERATOR_DESCRIPTIONS: Record<string, string> = {
+  'pulse-pattern': 'A regular rhythmic pulse you can bound, voice, and vary',
+};

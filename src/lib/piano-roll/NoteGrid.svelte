@@ -4,6 +4,7 @@
   import { isBlackKey, MIN_MIDI, MAX_MIDI, NOTE_COUNT } from './types.js';
   import type { Note } from './types.js';
   import { auditionNote } from './audio.js';
+  import GeneratorRegion from './GeneratorRegion.svelte';
   import { firstSelectableLayer, isLayerSelectable } from './layers.js';
   import { harmonySegments, scaleSegments } from './tracks.js';
 
@@ -487,6 +488,11 @@
       aria-hidden="true"
     ></div>
   {/each}
+
+  <!-- Bounded generator session region (generators.md §4.3, §7.1) — its own
+       handles absorb pointer events before they'd otherwise fall through to
+       grid note-creation/selection. -->
+  <GeneratorRegion />
 
   <!-- Drag-to-select rectangle -->
   {#if selRect}
