@@ -40,15 +40,53 @@
     }
   });
 
+  /**
+   * A module card's overflow `<details class="more-menu">` only closes
+   * natively on its own summary click (or an item's own handler) — a native
+   * `<details>` doesn't dismiss on an outside click or Escape the way a real
+   * menu/popover does, which is surprising for a dropdown-shaped control.
+   * One delegated pair of document listeners covers every module card's
+   * menu rather than per-node listeners.
+   */
+  $effect(() => {
+    function closeOpenMenus(exceptTarget?: Node) {
+      document.querySelectorAll<HTMLDetailsElement>('.more-menu[open]').forEach((details) => {
+        if (exceptTarget && details.contains(exceptTarget)) return;
+        const hadFocusInside = details.contains(document.activeElement);
+        details.removeAttribute('open');
+        if (hadFocusInside) details.querySelector('summary')?.focus();
+      });
+    }
+    function onPointerDown(e: PointerEvent) {
+      closeOpenMenus(e.target as Node);
+    }
+    function onKeydown(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeOpenMenus();
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeydown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeydown);
+    };
+  });
+
   const selectedNode = $derived(session?.recipe.nodes.find((n) => n.id === selectedNodeId) ?? null);
   const selectedOperator = $derived(
     selectedNode ? operatorRegistry.get(selectedNode.operatorId) : undefined,
   );
 
   /** Apply must not be offered for a session with nothing valid to commit — applyGeneratorSession() itself just closes the session in that case, silently discarding the visible preview otherwise (generators.md §6.1 step 5). */
-  const canApply = $derived(
-    !!session?.result && session.status !== 'error' && !!store.layerFor(session.targetLayerId),
-  );
+  const canApply = $derived(store.canApplyGeneratorSession);
+
+  const LOCK_DIMENSIONS: { key: keyof VariationLocks; label: string }[] = [
+    { key: 'rhythm', label: 'Rhythm' },
+    { key: 'pitch', label: 'Pitch' },
+    { key: 'contour', label: 'Contour' },
+    { key: 'register', label: 'Register' },
+    { key: 'voicing', label: 'Voicing' },
+    { key: 'dynamics', label: 'Dynamics' },
+  ];
 
   /** Which lock chips are shown — only dimensions an operator actually in the chain can randomize, rather than always all six (most are inert for the current recipe). */
   const visibleLockDimensions = $derived.by(() => {
@@ -61,15 +99,6 @@
     }
     return LOCK_DIMENSIONS.filter((d) => present.has(d.key));
   });
-
-  const LOCK_DIMENSIONS: { key: keyof VariationLocks; label: string }[] = [
-    { key: 'rhythm', label: 'Rhythm' },
-    { key: 'pitch', label: 'Pitch' },
-    { key: 'contour', label: 'Contour' },
-    { key: 'register', label: 'Register' },
-    { key: 'voicing', label: 'Voicing' },
-    { key: 'dynamics', label: 'Dynamics' },
-  ];
 
   const COMMIT_MODES: { value: GeneratorCommitMode; label: string }[] = [
     { value: 'insert', label: 'Insert' },

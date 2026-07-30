@@ -133,10 +133,7 @@
       >
         {#if tab.id === 'generator-session' && store.generatorSession}
           {@const session = store.generatorSession}
-          {@const canApply =
-            !!session.result &&
-            session.status !== 'error' &&
-            !!store.layerFor(session.targetLayerId)}
+          {@const canApply = store.canApplyGeneratorSession}
           <div class="group">
             <span class="group-label">Session</span>
             <div class="group-commands">

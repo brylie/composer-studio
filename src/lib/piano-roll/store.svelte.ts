@@ -343,6 +343,18 @@ export function createStore() {
     return session.status === nextStatus ? session : { ...session, status: nextStatus };
   });
 
+  /**
+   * Whether Apply has anything valid to commit (generators.md §6.1 step 5) —
+   * the single predicate applyGeneratorSession() itself gates on, also
+   * exposed to UI so an Apply button can disable itself instead of offering
+   * an action that would just close the session and discard its (possibly
+   * stale, error-preserved) preview without committing anything.
+   */
+  const canApplyGeneratorSession = $derived.by((): boolean => {
+    const session = generatorSessionView;
+    return !!session?.result && session.status !== 'error' && !!layerFor(session.targetLayerId);
+  });
+
   /** The session's current preview notes, gated on the target layer's visibility (generators.md §6.3). */
   const visibleGeneratorPreviewNotes = $derived.by(() => {
     const session = generatorSessionView;
@@ -490,7 +502,7 @@ export function createStore() {
   function applyGeneratorSession() {
     const session = generatorSessionView;
     if (!session) return;
-    if (session.result && session.status !== 'error' && layerFor(session.targetLayerId)) {
+    if (canApplyGeneratorSession) {
       applyCommandResult(commitGeneratorResult(notes, session));
     }
     _generatorSession = null;
@@ -1154,6 +1166,11 @@ export function createStore() {
 
     get generatorSession() {
       return generatorSessionView;
+    },
+
+    /** Whether Apply has anything valid to commit — same predicate applyGeneratorSession() itself gates on. */
+    get canApplyGeneratorSession() {
+      return canApplyGeneratorSession;
     },
 
     /** The active session's GeneratorContext (null when no session is active) — for chain-edit.ts's insert/reset actions, which need it to compute an operator's default params. */

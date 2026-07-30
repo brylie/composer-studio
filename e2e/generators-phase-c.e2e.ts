@@ -196,4 +196,22 @@ test.describe('Generators — Phase C session UX', () => {
 
     await expect.poll(() => startBeatField.inputValue()).not.toEqual(before);
   });
+
+  test('ArrowUp on the region body raises pitch; ArrowDown lowers it', async ({ page }) => {
+    await page.goto('/');
+    await startPulseGenerator(page);
+
+    const minPitchField = page.getByRole('spinbutton', { name: 'Min pitch', exact: true });
+    const regionBody = page.getByRole('button', { name: 'Move generator region' });
+    await regionBody.focus();
+    const initial = Number(await minPitchField.inputValue());
+
+    await regionBody.press('ArrowUp');
+    await expect
+      .poll(async () => Number(await minPitchField.inputValue()))
+      .toBeGreaterThan(initial);
+
+    await regionBody.press('ArrowDown');
+    await expect.poll(async () => Number(await minPitchField.inputValue())).toBe(initial);
+  });
 });

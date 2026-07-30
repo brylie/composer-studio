@@ -136,7 +136,11 @@
         e.key === 'ArrowDown')
     ) {
       const deltaBeats = e.key === 'ArrowLeft' ? -snap : e.key === 'ArrowRight' ? snap : 0;
-      const deltaRows = e.key === 'ArrowUp' ? 1 : e.key === 'ArrowDown' ? -1 : 0;
+      // translateBounds' deltaRows follows the pointer-move convention
+      // (positive = dragged down = pitch decreases), so ArrowUp — which must
+      // raise the region's pitch — maps to a negative delta, and ArrowDown
+      // to a positive one; the reverse of a naive "up key → +1" mapping.
+      const deltaRows = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
       next = translateBounds(bounds, deltaBeats, deltaRows);
     } else if (kind === 'resize-left' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       const delta = e.key === 'ArrowLeft' ? -snap : snap;
