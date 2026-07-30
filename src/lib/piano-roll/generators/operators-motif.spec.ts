@@ -38,6 +38,31 @@ describe('motifGenerateOperator', () => {
     expect(plan.notes).toHaveLength(8);
   });
 
+  it('falls back to the arch contour for an unrecognized contour value instead of producing an empty plan', () => {
+    const ctx = makeGeneratorContext({
+      scaleTrack: [{ id: 's1', beat: 0, root: 0, mode: 'major' }],
+    });
+    const baseParams = {
+      source: 'active-scale',
+      lengthBeats: 2,
+      eventCount: 4,
+      maxLeapSemitones: 12,
+      repetition: 1,
+      variationAmount: 0,
+    };
+    const archResult = motifGenerateOperator.process(
+      ctx,
+      {},
+      request({ params: { ...baseParams, contour: 'arch' } }),
+    );
+    const malformedResult = motifGenerateOperator.process(
+      ctx,
+      {},
+      request({ params: { ...baseParams, contour: 'not-a-real-contour' } }),
+    );
+    expect((malformedResult.notes as NotePlan).notes).toEqual((archResult.notes as NotePlan).notes);
+  });
+
   it('every note stays within the requested pitch bounds', () => {
     const ctx = makeGeneratorContext({
       scaleTrack: [{ id: 's1', beat: 0, root: 0, mode: 'major' }],

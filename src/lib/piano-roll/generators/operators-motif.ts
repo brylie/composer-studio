@@ -55,6 +55,12 @@ function buildContourDegrees(
       case 'mixed':
         degrees.push(Math.round((random() * 2 - 1) * 3));
         break;
+      default:
+        // Malformed recipe data (e.g. an unrecognized contour value) falls
+        // back to 'arch' rather than silently producing an empty NotePlan —
+        // same defensive style as operators-arpeggiate.ts's orderPitches.
+        degrees.push(i <= half ? i : eventCount - i);
+        break;
     }
   }
   return degrees;
