@@ -90,7 +90,7 @@ reading each descriptor's `isApplicable` body:
 
 ```typescript
 type OperationInputMode =
-  | 'requires-selection' // pure transform: no input, no output (transpose, invert)
+  | 'requires-selection' // consumes a selection, produces transformed output (transpose, invert)
   | 'originates' // can run with nothing selected (pulse-pattern, euclidean-rhythm)
   | 'both' // transforms a selection if present, originates into bounds if not
   //         (generate-chords's chord-track source; an arpeggiate run against
@@ -146,14 +146,30 @@ every surface queries for "does this apply instantly, open a drawer, or open
 a session," rather than each surface re-deriving the answer from recipe
 shape or param count on its own.
 
-Concretely, one rule replaces "click a command → drawer-or-instant, click a
-generator → always session":
+Concretely, two independent axes replace "click a command → drawer-or-instant,
+click a generator → always session" — param tier resolves what the _primary_
+click does, and composability only decides whether a _secondary_ affordance
+exists alongside it. A composable descriptor's primary click is never routed
+to the full session; the full session is reachable solely through the
+secondary action:
 
-| Condition                                                                                                                                                                                                                          | Primary click behavior                                                                                                                                          |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No params beyond tier I/II                                                                                                                                                                                                         | Apply instantly — the same `quickApplyCommand`/`quickApplyGenerator` path, invoked directly from the ribbon button, not routed through quick-apply's palette UI |
-| Has tier III params, but is a single node (no recipe composition)                                                                                                                                                                  | Open the params drawer — generator descriptors gain this path today only commands have                                                                          |
-| Genuinely composable (the point of invoking it is to build/edit a multi-node chain, e.g. starting from Chords and adding Arpeggiate + Euclidean gate per [generators.md §17](./generators.md#17-worked-example-composing-a-chain)) | Open the full session/inspector, via an explicit secondary action ("Compose…"), not the only click target                                                       |
+| Condition                                                         | Primary click behavior                                                                                                                                          |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No params beyond tier I/II                                        | Apply instantly — the same `quickApplyCommand`/`quickApplyGenerator` path, invoked directly from the ribbon button, not routed through quick-apply's palette UI |
+| Has tier III params, but is a single node (no recipe composition) | Open the params drawer — generator descriptors gain this path today only commands have                                                                          |
+
+Separately, any descriptor with `isComposable: true` (e.g. `generate-chords`,
+whose `chord-source → voicing` default recipe is itself only tier I/II — see
+above) also gets a secondary "Compose…" affordance that opens the full
+session/inspector, so it can be extended into a multi-node chain (starting
+from Chords and adding Arpeggiate + Euclidean gate per
+[generators.md §17](./generators.md#17-worked-example-composing-a-chain)).
+This is additive, not a third branch of primary-click routing: the primary
+click for a composable descriptor still resolves from the two rows above,
+exactly as it would for a non-composable one. This precedence — param tier
+decides the primary action, `isComposable` only ever adds the secondary one —
+is what one shared resolver applies consistently across the ribbon, the
+quick-apply palette, and the command palette.
 
 This means the ribbon's `generate` tab stops being "buttons that always open
 a session" and starts working exactly like `transform`'s: click applies,
@@ -211,11 +227,14 @@ registry-shaped.
 
 - Collapse `COMMAND_LABELS`/`GENERATOR_LABELS` into one `OPERATION_LABELS:
 Record<string, string>` and likewise for descriptions, keyed across both
-  registries' combined id space. This is not just tidiness: it's the
-  mechanical enforcement that catches a future id collision
-  (`generate-chords`, this session's actual bug) at the point labels are
-  declared, rather than silently rendering two buttons with the same name in
-  the same tab.
+  registries' combined id space. This is metadata only, not an enforcement
+  mechanism — per the Ribbon reorganization section above, `OPERATION_LABELS`
+  stays a plain, unchecked `Record` merge. The actual collision detection
+  (`generate-chords`, this session's actual bug) lives in the merged
+  `commandRegistry`/`generatorCatalog` id-space `Map` built for
+  `RibbonGroup.commandIds` resolution, which explicitly rejects a duplicate
+  id rather than silently rendering two buttons with the same name in the
+  same tab.
 - Every `GeneratorDescriptor` in the catalog should declare
   `getDisabledReasonKey`, and `RibbonPanel.svelte`'s generate-tab block
   should resolve the session-active tooltip through it — via a generic key
