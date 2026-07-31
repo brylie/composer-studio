@@ -299,6 +299,14 @@ interface CommandDescriptor extends UnifiedOperationDescriptor {
 interface GeneratorDescriptor extends UnifiedOperationDescriptor {
   getDefaultBounds(ctx: GeneratorContext): GeneratorBounds;
   createDefaultRecipe(ctx: GeneratorContext): GeneratorRecipe;
+
+  // Narrows the inherited signature: a generator's Quick Apply behavior can
+  // depend on scaleTrack, timeSignatureTrack, or targetLayerId (e.g. whether
+  // Arpeggiate can build a selection-aware recipe against the current target
+  // layer), none of which exist on the plain CommandContext the base
+  // signature declares. GeneratorContext extends CommandContext, so this is
+  // a safe narrowing, not a breaking one.
+  resolveQuickApplyBehavior?(ctx: GeneratorContext): QuickApplyBehavior | null;
 }
 ```
 
@@ -306,6 +314,14 @@ The exact TypeScript inheritance may differ to avoid coupling unrelated
 contexts. What matters is that every surface can query the same resolved
 capabilities without branching on command versus generator except when invoking
 the underlying engine.
+
+Correspondingly, the shared resolver must call each descriptor's
+`resolveQuickApplyBehavior` with the context built for its own kind: a
+`CommandDescriptor` gets `OperationResolutionContext.commandContext`, a
+`GeneratorDescriptor` gets `OperationResolutionContext.generatorContext`. The
+resolver never downgrades a generator's context to the plain `CommandContext`
+shape — doing so would silently strip the fields its implementation may
+depend on.
 
 ---
 
