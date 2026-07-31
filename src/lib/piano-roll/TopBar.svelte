@@ -51,6 +51,19 @@
 
   <div class="spacer"></div>
 
+  <button
+    class="quick-apply-btn"
+    onclick={() => (ribbonUi.quickApplyOpen = true)}
+    disabled={store.commandContext.count === 0}
+    aria-label="Quick apply to selection"
+    title={store.commandContext.count === 0
+      ? 'Select notes to quick-apply an operation'
+      : 'Quick apply a command or generator to the selection'}
+  >
+    <Icon name="bolt" />
+    <span class="quick-apply-label">Quick Apply</span>
+  </button>
+
   <button class="export-btn" onclick={handleExport} aria-label="Export MIDI" title="Export MIDI">
     <Icon name="export" />
     <span class="export-label">Export MIDI</span>
@@ -180,7 +193,8 @@
     flex: 1;
   }
 
-  .export-btn {
+  .export-btn,
+  .quick-apply-btn {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -196,8 +210,23 @@
     transition: background 0.12s;
   }
 
-  .export-btn:hover {
+  .export-btn:hover,
+  .quick-apply-btn:hover:not(:disabled) {
     background: #35355a;
+  }
+
+  .quick-apply-btn {
+    background: #4a3f8f;
+    border-color: #6b6bd9;
+  }
+
+  .quick-apply-btn:hover:not(:disabled) {
+    background: #5a4fae;
+  }
+
+  .quick-apply-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .chrome-group {
@@ -223,11 +252,13 @@
       max-width: 100%;
     }
 
-    .export-label {
+    .export-label,
+    .quick-apply-label {
       display: none;
     }
 
-    .export-btn {
+    .export-btn,
+    .quick-apply-btn {
       padding: 6px;
     }
   }

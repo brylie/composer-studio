@@ -10,6 +10,8 @@ import {
 } from './arranger.js';
 import { disposeLayer } from './audio.js';
 import { commandRegistry } from './commands/index.js';
+import { resolveDefaultParams } from './commands/types.js';
+import { generatorCatalog } from './generators/catalog.js';
 import { createGeneratorContext } from './generators/context.js';
 import { operatorRegistry } from './generators/operators.js';
 import type {
@@ -990,6 +992,76 @@ export function createStore() {
     return false;
   }
 
+  // ── Quick-apply (direct-manipulation.md) ────────────────────────────────────
+
+  /**
+   * Runs `commandId` immediately with every param field's default (or
+   * `getDefault(ctx)` when a field declares one) — the same default-filling
+   * CommandRibbon's openCommand() does before a user ever touches the params
+   * drawer, just invoked without opening it. This is quick-apply's "instant
+   * default result" path (direct-manipulation.md): a third invocation
+   * alongside "one-click command" and "open the full session".
+   */
+  function quickApplyCommand(commandId: string): boolean {
+    const descriptor = commandRegistry.find((command) => command.id === commandId);
+    if (!descriptor?.run) return false;
+    const ctx = commandContext;
+    if (!descriptor.isApplicable(ctx)) return false;
+    const params = resolveDefaultParams(descriptor.params, ctx);
+    return executeCommand(commandId, params);
+  }
+
+  /**
+   * A GeneratorBounds derived from the current selection's own extent —
+   * direct-manipulation.md's core principle, "the selection rectangle *is*
+   * the bounds field": no octaveRange/targetRange drawer field should
+   * duplicate what's already on screen as the selection. Falls back to
+   * `fallback` (a descriptor's own playhead-relative default bounds) when
+   * nothing is selected.
+   */
+  function boundsFromSelectionOrDefault(fallback: GeneratorBounds): GeneratorBounds {
+    const { pitchRange, beatRange } = selectionContext;
+    if (!pitchRange || !beatRange) return fallback;
+    return {
+      time: { startBeat: beatRange.start, endBeat: beatRange.end },
+      pitch: { minMidi: pitchRange.min, maxMidi: pitchRange.max },
+      allowTail: fallback.allowTail,
+    };
+  }
+
+  /**
+   * Quick-apply for a generator (direct-manipulation.md): evaluates
+   * `generatorId`'s default recipe once, against bounds derived from the
+   * current selection, and commits straight to notes through the same
+   * applyCommandResult path every command uses — no persistent
+   * GeneratorSession, no inspector UI opens. Refuses while a real session is
+   * already active (generators.md §4.7's one-session invariant — the caller
+   * must Apply/Cancel it first) and when evaluation fails, mirroring the
+   * session flow's own Apply guard (canApplyGeneratorSession).
+   */
+  function quickApplyGenerator(generatorId: string): boolean {
+    if (_generatorSession) return false;
+    const descriptor = generatorCatalog.find((g) => g.id === generatorId);
+    if (!descriptor) return false;
+    const ctx = generatorContextFor(activeLayerId);
+    if (!descriptor.isApplicable(ctx)) return false;
+
+    const bounds = boundsFromSelectionOrDefault(descriptor.getDefaultBounds(ctx));
+    const recipe = descriptor.createDefaultRecipe(ctx);
+    const session = createGeneratorSession({
+      targetLayerId: activeLayerId,
+      name: 'Quick apply',
+      bounds,
+      recipe,
+    });
+    const outcome = evaluateSession(ctx, session, computeContextRevision(ctx), operatorRegistry);
+    _generatorDiagnostics = outcome.diagnostics;
+    if (outcome.session.status !== 'ready') return false;
+
+    applyCommandResult(commitGeneratorResult(notes, outcome.session));
+    return true;
+  }
+
   // ── Public API ────────────────────────────────────────────────────────────
 
   return {
@@ -1240,6 +1312,8 @@ export function createStore() {
     redo,
     applyCommandResult,
     executeCommand,
+    quickApplyCommand,
+    quickApplyGenerator,
     startGeneratorSession,
     startGeneratorSessionFromDescriptor,
     recomputeGeneratorSession,

@@ -15,7 +15,7 @@ async function startGenerator(page: import('@playwright/test').Page, label: stri
   await page.getByRole('button', { name: label, exact: true }).click();
 }
 
-/** Places a chord marker on the chord lane at the given pixel x — mirrors generate-chords-chord-track.e2e.ts. */
+/** Places a chord marker on the chord lane at the given pixel x. */
 async function addChordMarker(
   page: import('@playwright/test').Page,
   x: number,

@@ -16,6 +16,7 @@
   import NoteGrid from './NoteGrid.svelte';
   import OverlayShell from './OverlayShell.svelte';
   import PianoKeys from './PianoKeys.svelte';
+  import QuickApplyPalette from './QuickApplyPalette.svelte';
   import ScaleEventEditor from './ScaleEventEditor.svelte';
   import SynthPanel from './SynthPanel.svelte';
   import TimeSignatureEventEditor from './TimeSignatureEventEditor.svelte';
@@ -397,6 +398,14 @@
     onclose={() => (ribbonUi.layerPanelOpen = false)}
   >
     <LayerPanel />
+  </OverlayShell>
+
+  <OverlayShell
+    open={ribbonUi.quickApplyOpen}
+    title="Quick apply"
+    onclose={() => (ribbonUi.quickApplyOpen = false)}
+  >
+    <QuickApplyPalette onApplied={() => (ribbonUi.quickApplyOpen = false)} />
   </OverlayShell>
 
   <OverlayShell

@@ -28,7 +28,10 @@
     {
       id: 'generate',
       label: 'Generate',
-      groups: [{ id: 'harmony', label: 'Harmony', commandIds: ['generate-chords'] }],
+      // No commandIds groups: 'generate-chords' now lives solely in
+      // generatorCatalog (below) since its CommandDescriptor twin was
+      // removed — every generator in this tab comes from the catalog.
+      groups: [],
     },
   ];
 </script>

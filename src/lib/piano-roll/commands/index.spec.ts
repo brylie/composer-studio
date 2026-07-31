@@ -12,7 +12,6 @@ describe('commandRegistry', () => {
       'diminution',
       'permutation',
       'jitter',
-      'generate-chords',
     ];
     expect(new Set(ids).size).toBe(ids.length); // all ids unique
     expect(ids.length).toBe(expectedIds.length); // no extra/unimplemented entries

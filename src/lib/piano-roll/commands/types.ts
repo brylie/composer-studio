@@ -39,6 +39,24 @@ export type ParamField =
       default: { min: number; max: number };
     });
 
+/**
+ * Seeds a value for every field in `fields`: `getDefault(ctx)` when the field
+ * declares one, otherwise its static `default`. Shared by CommandRibbon's
+ * params drawer and quick-apply's instant-default path so both fill a
+ * command's params identically.
+ */
+export function resolveDefaultParams(
+  fields: ParamField[] | undefined,
+  ctx: CommandContext,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    (fields ?? []).map((field) => [
+      field.key,
+      field.getDefault ? field.getDefault(ctx) : field.default,
+    ]),
+  );
+}
+
 export interface CommandDescriptorBase {
   id: string; // stable, kebab-case
   category: 'transform' | 'generate' | 'export' | 'view' | 'transport';
