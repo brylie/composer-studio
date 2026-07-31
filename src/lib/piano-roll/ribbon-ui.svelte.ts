@@ -13,6 +13,7 @@ export interface RibbonUiState {
   soundDrawerOpen: boolean;
   layerPanelOpen: boolean;
   previewMode: boolean;
+  quickApplyOpen: boolean;
 }
 
 export function createRibbonUiState(): RibbonUiState {
@@ -27,6 +28,10 @@ export function createRibbonUiState(): RibbonUiState {
   let soundDrawerOpen = $state(false);
   let layerPanelOpen = $state(false);
   let previewMode = $state(false);
+  // Quick-apply's flat command/generator palette (direct-manipulation.md) —
+  // its own flag rather than reusing paramsDrawerOpen/ribbonOpen since it's
+  // reachable independently of the ribbon being open at all.
+  let quickApplyOpen = $state(false);
 
   // $effect bodies never run during SSR, so `window` is safely available here.
   $effect(() => {
@@ -77,6 +82,12 @@ export function createRibbonUiState(): RibbonUiState {
     },
     set previewMode(value) {
       previewMode = value;
+    },
+    get quickApplyOpen() {
+      return quickApplyOpen;
+    },
+    set quickApplyOpen(value) {
+      quickApplyOpen = value;
     },
   };
 }

@@ -10,7 +10,6 @@ export const COMMAND_LABELS: Record<string, string> = {
   diminution: 'Diminution',
   permutation: 'Permutation',
   jitter: 'Jitter',
-  'generate-chords': 'Generate Chords',
 };
 
 export const COMMAND_DESCRIPTIONS: Record<string, string> = {
@@ -21,7 +20,6 @@ export const COMMAND_DESCRIPTIONS: Record<string, string> = {
   diminution: 'Shrink note durations',
   permutation: 'Reorder selected notes',
   jitter: 'Randomize timing and pitch slightly',
-  'generate-chords': 'Generate voice-led chords from the selection',
 };
 
 export const DISABLED_REASON_TEXT: Record<string, string> = {

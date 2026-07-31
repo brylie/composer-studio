@@ -2,7 +2,6 @@
 
 import { augmentation } from './augmentation.js';
 import { diminution } from './diminution.js';
-import { generateChords } from './generate-chords.js';
 import { invert } from './invert.js';
 import { jitter } from './jitter.js';
 import { permutation } from './permutation.js';
@@ -10,6 +9,11 @@ import { retrograde } from './retrograde.js';
 import { transpose } from './transpose.js';
 import type { CommandDescriptor } from './types.js';
 
+// 'generate-chords' isn't here: it was migrated onto the shared
+// recipe/operator infrastructure (generators.md §18 Phase D item 1) and now
+// lives solely as generatorCatalog's generateChordsGenerator
+// (generators/catalog.ts) — the old CommandDescriptor version duplicated its
+// id and has been removed.
 const transformCommands: CommandDescriptor[] = [
   transpose,
   retrograde,
@@ -20,8 +24,6 @@ const transformCommands: CommandDescriptor[] = [
   jitter,
 ];
 
-const generateCommands: CommandDescriptor[] = [generateChords];
-
-export const commandRegistry: CommandDescriptor[] = [...transformCommands, ...generateCommands];
+export const commandRegistry: CommandDescriptor[] = [...transformCommands];
 
 export * from './types.js';

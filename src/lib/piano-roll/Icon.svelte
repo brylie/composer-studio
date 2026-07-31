@@ -148,6 +148,12 @@
       { tag: 'circle', cx: 6.5, cy: 6.5, r: 1.1, fill: 'currentColor' },
       { tag: 'circle', cx: 10.2, cy: 6.5, r: 1.1, fill: 'currentColor' },
     ],
+    // Lightning bolt — quick-apply's trigger (direct-manipulation.md).
+    bolt: [{ tag: 'path', d: 'M7 1L2.5 7.2H6L5.5 12L10.5 5.5H7Z', fill: 'currentColor' }],
+    search: [
+      { tag: 'circle', cx: 5.5, cy: 5.5, r: 3.5 },
+      { tag: 'line', x1: 8.2, y1: 8.2, x2: 11.5, y2: 11.5 },
+    ],
   };
 </script>
 

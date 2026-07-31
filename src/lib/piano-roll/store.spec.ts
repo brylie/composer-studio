@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { generatorCatalog } from './generators/catalog.js';
 import { CommandHistory, isContiguous } from './history.js';
 import { createStore } from './store.svelte.js';
 import type { Note } from './types.js';
@@ -788,6 +789,89 @@ describe('createStore — executeCommand', () => {
     expect(executed).toBe(false);
     expect(store.notes[0].midiNote).toBe(60);
     expect(store.history.canUndo).toBe(false);
+  });
+});
+
+// ── createStore — quickApplyCommand (direct-manipulation.md) ────────────────
+
+describe('createStore — quickApplyCommand', () => {
+  it('runs immediately using each param field default, without a params object from the caller', () => {
+    const store = createStore();
+    store.addNote(makeNote(store, { id: 'a', midiNote: 60 }));
+    store.selectNote('a', false);
+
+    const applied = store.quickApplyCommand('transpose');
+
+    expect(applied).toBe(true);
+    // transpose's `semitones` field defaults to 1 (transpose.ts) — quick-apply
+    // must fill that in itself rather than calling run() with an empty params bag.
+    expect(store.notes[0].midiNote).toBe(61);
+    expect(store.history.canUndo).toBe(true);
+  });
+
+  it('returns false and leaves notes/history untouched for an inapplicable command', () => {
+    const store = createStore();
+    store.addNote(makeNote(store, { id: 'a', midiNote: 60 }));
+    // No selection — transpose requires at least one selected note.
+
+    const applied = store.quickApplyCommand('transpose');
+
+    expect(applied).toBe(false);
+    expect(store.notes[0].midiNote).toBe(60);
+    expect(store.history.canUndo).toBe(false);
+  });
+
+  it('returns false for an unknown command id', () => {
+    const store = createStore();
+    expect(store.quickApplyCommand('not-a-real-command')).toBe(false);
+  });
+});
+
+// ── createStore — quickApplyGenerator (direct-manipulation.md) ──────────────
+
+describe('createStore — quickApplyGenerator', () => {
+  it("derives bounds from the selection's own extent and commits immediately, no session left behind", () => {
+    const store = createStore();
+    store.addNote(makeNote(store, { id: 'a', midiNote: 60, startBeat: 0, durationBeats: 4 }));
+    store.selectNote('a', false);
+
+    const applied = store.quickApplyGenerator('euclidean-rhythm');
+
+    expect(applied).toBe(true);
+    expect(store.generatorSession).toBeNull();
+    expect(store.history.canUndo).toBe(true);
+
+    const generated = store.notes.filter((n) => n.id !== 'a');
+    expect(generated.length).toBeGreaterThan(0);
+    for (const note of generated) {
+      // The selection was a single note at midiNote 60 spanning beats
+      // [0, 4) — quick-apply's bounds should come from exactly that extent
+      // (direct-manipulation.md's "selection rectangle is the bounds
+      // field"), not the generator's own playhead-relative default bounds.
+      expect(note.midiNote).toBe(60);
+      expect(note.startBeat).toBeGreaterThanOrEqual(0);
+      expect(note.startBeat).toBeLessThan(4);
+    }
+  });
+
+  it('refuses while a generator session is already active', () => {
+    const store = createStore();
+    store.addNote(makeNote(store, { id: 'a', midiNote: 60, startBeat: 0, durationBeats: 4 }));
+    store.selectNote('a', false);
+    const pulsePattern = generatorCatalog.find((g) => g.id === 'pulse-pattern');
+    if (!pulsePattern) throw new Error('pulse-pattern missing from generatorCatalog');
+    const started = store.startGeneratorSessionFromDescriptor(pulsePattern, 'Pulse');
+    expect(started).toBe(true);
+
+    const applied = store.quickApplyGenerator('euclidean-rhythm');
+
+    expect(applied).toBe(false);
+    expect(store.generatorSession).not.toBeNull();
+  });
+
+  it('returns false for an unknown generator id', () => {
+    const store = createStore();
+    expect(store.quickApplyGenerator('not-a-real-generator')).toBe(false);
   });
 });
 
