@@ -55,12 +55,15 @@ Extends [command-palette.md](./command-palette.md): the palette lists every
 `CommandDescriptor` and `GeneratorDescriptor` whose `isApplicable(ctx)` is
 true for the current selection, in one flat, searchable, un-tabbed list — not
 split across ribbon tabs. Selecting an entry runs it **immediately** using
-`getDefaultParams(ctx)` (generators) or each field's `default` (commands)
-against the current selection — the same one-node-recipe-evaluated-inline
-path `generators.md`'s `createDefaultRecipe`/`evaluateGeneratorRecipe`
-already defines, just invoked without opening the session UI around it. No
-drawer opens for the common case; the notes on the grid update and that's the
-whole interaction.
+`createDefaultRecipe(ctx)` (generators) or each field's `default` (commands)
+against the current selection, evaluated inline via the same
+`evaluateGeneratorRecipe` path `generators.md`'s session already uses, just
+invoked without opening the session UI around it. The recipe
+`createDefaultRecipe` returns may be a single node or several — a compound
+generator (e.g. a chord source feeding a voicing step) still evaluates and
+commits in one inline pass, no different from a one-node case. No drawer
+opens for the common case; the notes on the grid update and that's the whole
+interaction.
 
 This does not change either descriptor's underlying contract
 ([transformations.md](./transformations.md#command-descriptor),

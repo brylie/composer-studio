@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { generatorCatalog } from './generators/catalog.js';
 import { CommandHistory, isContiguous } from './history.js';
 import { createStore } from './store.svelte.js';
@@ -872,6 +872,35 @@ describe('createStore — quickApplyGenerator', () => {
   it('returns false for an unknown generator id', () => {
     const store = createStore();
     expect(store.quickApplyGenerator('not-a-real-generator')).toBe(false);
+  });
+
+  it('returns false and leaves notes/history untouched when evaluation produces an error diagnostic', () => {
+    const store = createStore();
+    store.addNote(makeNote(store, { id: 'a', midiNote: 60, startBeat: 0, durationBeats: 4 }));
+    store.selectNote('a', false);
+    const euclidean = generatorCatalog.find((g) => g.id === 'euclidean-rhythm');
+    if (!euclidean) throw new Error('euclidean-rhythm missing from generatorCatalog');
+    // An output referencing a node id that doesn't exist in the recipe fails
+    // validateRecipe (recipe.ts's 'unknown-output-node'), forcing
+    // evaluateSession's outcome.session.status to 'error' regardless of what
+    // the registered operators can otherwise produce.
+    const spy = vi.spyOn(euclidean, 'createDefaultRecipe').mockReturnValue({
+      id: 'broken-recipe',
+      version: 1,
+      nodes: [],
+      edges: [],
+      output: { nodeId: 'missing-node', port: 'notes' },
+    });
+
+    const applied = store.quickApplyGenerator('euclidean-rhythm');
+
+    expect(applied).toBe(false);
+    expect(store.notes.length).toBe(1);
+    expect(store.notes[0].id).toBe('a');
+    expect(store.history.canUndo).toBe(false);
+    expect(store.generatorDiagnostics.some((d) => d.level === 'error')).toBe(true);
+
+    spy.mockRestore();
   });
 });
 

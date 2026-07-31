@@ -2,6 +2,7 @@
   import { MediaQuery } from 'svelte/reactivity';
   import { COMMAND_LABELS, GENERATOR_LABELS } from './command-metadata.js';
   import { commandRegistry } from './commands/index.js';
+  import { resolveDefaultParams } from './commands/types.js';
   import type { CommandDescriptor } from './commands/types.js';
   import { getEditorState } from './context.svelte.js';
   import GeneratorBrowser from './GeneratorBrowser.svelte';
@@ -37,13 +38,7 @@
     }
 
     activeCommandId = command.id;
-    const ctx = store.commandContext;
-    params = Object.fromEntries(
-      (command.params ?? []).map((field) => [
-        field.key,
-        field.getDefault ? field.getDefault(ctx) : field.default,
-      ]),
-    );
+    params = resolveDefaultParams(command.params, store.commandContext);
     ribbonUi.paramsDrawerOpen = true;
     if (isMobile.current) ribbonUi.ribbonOpen = false;
   }

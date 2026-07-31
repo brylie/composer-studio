@@ -10,6 +10,7 @@ import {
 } from './arranger.js';
 import { disposeLayer } from './audio.js';
 import { commandRegistry } from './commands/index.js';
+import { resolveDefaultParams } from './commands/types.js';
 import { generatorCatalog } from './generators/catalog.js';
 import { createGeneratorContext } from './generators/context.js';
 import { operatorRegistry } from './generators/operators.js';
@@ -1006,12 +1007,7 @@ export function createStore() {
     if (!descriptor?.run) return false;
     const ctx = commandContext;
     if (!descriptor.isApplicable(ctx)) return false;
-    const params = Object.fromEntries(
-      (descriptor.params ?? []).map((field) => [
-        field.key,
-        field.getDefault ? field.getDefault(ctx) : field.default,
-      ]),
-    );
+    const params = resolveDefaultParams(descriptor.params, ctx);
     return executeCommand(commandId, params);
   }
 

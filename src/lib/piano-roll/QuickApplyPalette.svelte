@@ -90,13 +90,24 @@
   // downstream truthy check on it as dead code.
   const activeEntry = $derived(filtered.at(Math.min(activeIndex, filtered.length - 1)) ?? null);
 
+  let failureMessage = $state<string | null>(null);
+
   function apply(entry: QuickApplyEntry) {
     if (entry.disabled) return;
+    failureMessage = null;
     const applied =
       entry.kind === 'command'
         ? store.quickApplyCommand(entry.id)
         : store.quickApplyGenerator(entry.id);
-    if (applied) onApplied();
+    if (applied) {
+      onApplied();
+      return;
+    }
+    if (entry.kind === 'generator') {
+      const errors = store.generatorDiagnostics.filter((d) => d.level === 'error');
+      failureMessage =
+        errors.map((d) => d.message).join(' ') || `${entry.label} could not be applied.`;
+    }
   }
 
   function handleKeydown(event: KeyboardEvent) {
@@ -120,7 +131,8 @@
     <input
       type="text"
       role="combobox"
-      aria-expanded={filtered.length > 0}
+      aria-label="Quick apply command or generator"
+      aria-expanded="true"
       aria-controls="quick-apply-listbox"
       aria-autocomplete="list"
       aria-activedescendant={activeEntry
@@ -133,10 +145,15 @@
       oninput={(event) => {
         query = event.currentTarget.value;
         activeIndex = 0;
+        failureMessage = null;
       }}
       onkeydown={handleKeydown}
     />
   </label>
+
+  {#if failureMessage}
+    <p class="failure" role="alert">{failureMessage}</p>
+  {/if}
 
   <div
     class="results"
@@ -149,6 +166,7 @@
         type="button"
         id="quick-apply-option-{entry.kind}-{entry.id}"
         role="option"
+        tabindex="-1"
         aria-selected={entry === activeEntry}
         class="result"
         class:active={entry === activeEntry}
@@ -206,6 +224,15 @@
 
   .search-field input::placeholder {
     color: #666888;
+  }
+
+  .failure {
+    margin: 0;
+    padding: 8px 14px;
+    font-size: 12px;
+    color: #d09090;
+    border-bottom: 1px solid #252540;
+    flex-shrink: 0;
   }
 
   .results {

@@ -92,9 +92,10 @@ reading each descriptor's `isApplicable` body:
 type OperationInputMode =
   | 'requires-selection' // pure transform: no input, no output (transpose, invert)
   | 'originates' // can run with nothing selected (pulse-pattern, euclidean-rhythm)
-  | 'both'; // transforms a selection if present, originates into bounds if not
-//          (generate-chords's chord-track source; an arpeggiate run against
-//          selected block chords vs. against an empty bounded region)
+  | 'both' // transforms a selection if present, originates into bounds if not
+  //         (generate-chords's chord-track source; an arpeggiate run against
+  //         selected block chords vs. against an empty bounded region)
+  | 'not-applicable'; // no selection semantics at all (export, view, transport)
 ```
 
 Added to `CommandDescriptorBase` (not a new parallel field on
@@ -106,6 +107,12 @@ in the catalog yet honor a selection as alternate input — that's exactly the
 `'both'` case [direct-manipulation.md](./direct-manipulation.md#core-principle-the-selection-rectangle-is-the-bounds-field)
 already assumes for bounds-from-selection, generalized to a first-class
 value instead of an implicit assumption baked into `boundsFromSelectionOrDefault`).
+`'not-applicable'` covers `category: 'export' | 'view' | 'transport'`
+descriptors (`export-midi`, playback controls, zoom/scroll commands) that
+have no selection-dependency story at all — making `inputMode` a required
+field on every descriptor, rather than leaving those categories to omit it,
+is what lets one resolver (below) answer "does this need a selection" for
+the whole catalog without a null case.
 
 ---
 
@@ -120,6 +127,24 @@ recompute a _multi-node recipe_, not merely because an entry lives in
 `generatorCatalog`. A single-node generator with only tier I/II params
 (`euclidean-rhythm`, `pulse-pattern`) has no more need for the full session
 UI on first invocation than `jitter` does for one.
+
+Both halves of this axis need to be queryable metadata, not inferred at the
+call site: `ParamField` gains an `interactionTier: 'spatial' | 'scrub' |
+'panel'` field (the tier I/II/III classification above, stated per-field
+instead of read off each param's shape by whoever's rendering it), and
+`GeneratorDescriptor` (alongside `CommandDescriptor`) gains an `isComposable:
+boolean` field. `isComposable` must be declared explicitly by each
+descriptor, not derived from `GeneratorRecipe.nodes.length` — a compiled
+recipe can contain renderer/adapter nodes that inflate the count for an
+operator that is, musically, a single step (`euclidean-rhythm`'s recipe is
+not "simple" merely because it happens to compile to one DAG node, and
+`generate-chords`'s default recipe is not "composable" merely because
+`chord-source → voicing` is two nodes). One resolver — consulted by the
+ribbon, quick-apply palette, and command palette alike — reads
+`interactionTier`/`isComposable` off the descriptor and is the single source
+every surface queries for "does this apply instantly, open a drawer, or open
+a session," rather than each surface re-deriving the answer from recipe
+shape or param count on its own.
 
 Concretely, one rule replaces "click a command → drawer-or-instant, click a
 generator → always session":
@@ -149,7 +174,19 @@ the two-registry split still shows up in the UI, now for no functional
 reason. [ribbon.md](./ribbon.md#data-structure)'s `RibbonGroup.commandIds`
 should resolve against **one merged id space** (commands and generators both
 looked up by id, from one `Map` built over both registries) so a group can
-mix both:
+mix both. Building that merged `Map` must explicitly detect any id present in
+both `commandRegistry` and `generatorCatalog` and reject the merge (throw or
+fail a startup assertion) rather than letting `new Map([...commands,
+...generators])`-style construction silently keep whichever entry was
+inserted last — the whole point of unifying the id space is to catch a
+collision like `generate-chords` at declaration time instead of masking it
+as last-write-wins. This duplicate-id check is orthogonal to collapsing
+`COMMAND_LABELS`/`GENERATOR_LABELS` into one `OPERATION_LABELS` record (below):
+the labels record stays a plain, unchecked `Record<string, string>` merge,
+while the id space that resolves `RibbonGroup.commandIds` gets the explicit
+validation. A focused test should cover a command and a generator declared
+with the same id and assert the merge is rejected rather than silently
+picking one:
 
 ```typescript
 {
@@ -184,7 +221,24 @@ Record<string, string>` and likewise for descriptions, keyed across both
   should resolve the session-active tooltip through it — via a generic key
   (e.g. `'generators.disabled.sessionActive'` alongside the existing
   `commands.disabled.*` keys in `DISABLED_REASON_TEXT`) — rather than a
-  string literal duplicated in the template.
+  string literal duplicated in the template. Today the generate-tab's
+  `disabled={sessionActive}` check and its tooltip are both computed straight
+  from `store.generatorSession`, ahead of and independent of
+  `isApplicable`/`getDisabledReasonKey` entirely — there's no ordering
+  between them to fix so much as a missing wire. Two ways to close it, either
+  is acceptable: fold "a session is already active" into
+  `GeneratorDescriptor.isApplicable(ctx)` itself (so a disabled button is
+  always an inapplicable one, matching how commands already work, and
+  `getDisabledReasonKey` is the one thing consulted once `isApplicable` is
+  false); or, since "session active" is a UI-level constraint rather than a
+  property of `ctx` a generator can reason about, keep it out of
+  `isApplicable` and instead give `GeneratorDescriptor` its own
+  `getDisabledReasonKey`-shaped callback that `RibbonPanel.svelte` consults
+  for the session-active case specifically. Either way, the tooltip text
+  itself must come from that callback's key resolved through
+  `DISABLED_REASON_TEXT`, not a template string literal — and existing
+  command disabled-reason behavior (`command.getDisabledReasonKey?.(ctx)`)
+  is unaffected either way.
 
 ---
 
@@ -198,13 +252,16 @@ number of steps, for reasons invisible to the user.
 
 **After:** clicking "Euclidean" in the ribbon applies it instantly against
 the current selection (or the playhead-relative default bounds if nothing's
-selected) — identical in step count to clicking "Retrograde." A secondary
-"Compose…" affordance on the same entry remains for the case that actually
-needs the session: building a chain that gates the Euclidean pattern through
-an additional processor, or manually tuning `steps`/`pulses`/`rotation`
-beyond what the default recipe picks. The default one-node recipe already
-existed (`createDefaultRecipe`); this changes only which UI step is the
-default landing spot.
+selected) — identical in step count to clicking "Retrograde." `steps`,
+`pulses`, and `rotation` stay reachable afterward as tier I/II on-canvas
+quick-apply controls (per
+[direct-manipulation.md's worked example](./direct-manipulation.md#worked-example-euclidean-rhythm)) —
+no drawer, no session, for ordinary tuning. A secondary "Compose…" affordance
+on the same entry remains for the case that actually needs the session:
+chaining the Euclidean pattern through an additional processor as part of a
+multi-node recipe. The default one-node recipe already existed
+(`createDefaultRecipe`); this changes only which UI step is the default
+landing spot.
 
 ---
 
@@ -224,7 +281,8 @@ default landing spot.
   (above) is an orthogonal, additive field, not a replacement — collapsing
   them would conflate "what kind of thing is this for catalog/palette
   filtering purposes" with "what does it need as input," which are
-  independent questions (`export-midi` has no input-mode story at all).
+  independent questions (`export-midi` declares `inputMode: 'not-applicable'`
+  rather than having no input-mode story at all).
 
 ---
 
